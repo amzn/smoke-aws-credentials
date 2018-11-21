@@ -1,7 +1,96 @@
-## Smoke AWS Credentials
+# SmokeAWSCredentials
 
-A library to obtain and assume automatically rotating AWS IAM roles written in the Swift programming language.
+The SmokeAWSCredentials package is a library for obtaining or assuming short-lived rotating AWS IAM credentials, suitable for being passed to clients from https://github.com/amzn/smoke-aws.
 
-## License
+# Conceptual overview
 
-This library is licensed under the Apache 2.0 License. 
+This package provides two mechanisms for obtaining credentials-
+* obtaining credentials from a container environment such as Elastic Container Service (ECS)
+* assuming credentials using existing credentials
+
+# Getting Started
+
+## Step 1: Add the SmokeAWSCredentials dependency
+
+SmokeAWSCredentials uses the Swift Package Manager. To use the framework, add the following dependency
+to your Package.swift and depend on the `SmokeAWSCredentials` target from this package-
+
+```
+dependencies: [
+    .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "0.6.0"))
+]
+```
+
+## Step 2: Obtain a credentials provider from a container environment such as Elastic Container Service (ECS)
+
+Once your application is depending in SmokeAWSCredentials, you can use `AwsContainerRotatingCredentialsProvider` to obtain credentials from a container environment such as Elastic Container Service (ECS).
+ 
+```swift
+guard let credentialsProvider = 
+    AwsContainerRotatingCredentialsProvider.get() else {
+        Log.error("Unable to obtain credentials from the container environment.")
+        return
+    }
+```
+
+The returned provider will mange the short lived credentials and rotate them when required. To get the current credentials-
+
+```swift
+    let currentCredentials = credentialsProvider.credentials
+```
+
+The credentials returned will be valid for at least *5 minutes* from the time this call is made.
+
+When you no longer need these credentials, you can stop the background credentials rotation.
+
+```swift
+    credentialsProvider.stop()
+```
+
+## Step 3: Assuming credentials using existing credentials
+
+SmokeAWSCredentials also allows you to assume short-lived credentials - maybe from another account or with different permissions -based on existing credentials. The following API reference discusses how assuming roles is handled-
+* https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html
+
+
+```swift
+    guard let assumedCredentials = credentialsProvider.getAssumedRotatingCredentials(
+        roleArn: roleArn,
+        roleSessionName: roleSessionName,
+        durationSeconds: assumedRoleDurationSeconds) else {
+            Log.error("Unable to obtain assume credentials for arn '\(roleArn)'.")
+            return
+    }
+```
+
+When you no longer need these credentials, you can stop the background credentials rotation.
+
+```swift
+    credentialsProvider.stop()
+```
+
+**Note:** If you stop the rotation of the parent credentials provider, the assumed credentials will eventually fail to rotate due to invalid parent credentials.
+
+## Step 4: Using custom credentials in development
+
+It is likely that your development environment will not have the same credentials available as production. `AwsContainerRotatingCredentialsProvider` has the ability to use static credentials from the `AWS_SECRET_ACCESS_KEY` and `AWS_ACCESS_KEY_ID` environment variables if these variables are available. For situations where static credentials are not acceptable, if the `DEBUG` compiler flag and the `AwsContainerRotatingCredentialsProvider.devIamRoleArnEnvironmentVariable` environment variable are set, this library will make the call the following shell script with the provided role-
+*  `/usr/local/bin/get-credentials.sh -r <role> -d <role life time in seconds>`
+
+This script can use this role to obtain credentials. If the output of this script can be JSON-decoded with the `ExpiringCredentials` struct, these credentials will be used for this provider. If the script returns credentials with an expiration, the provider will manage rotation, re-calling this script for updated credentials. 
+
+For convenience, `AwsContainerRotatingCredentialsProvider.get` optionally accepts the current environment variables.
+
+```
+    #if DEBUG
+    let environment = [...,
+                       AwsContainerRotatingCredentialsProvider.devIamRoleArnEnvironmentVariable:
+                           "arn:aws:iam::000000000000:role/EcsTaskExecutionRole"]
+    #else
+    let environment = ProcessInfo.processInfo.environment
+    #endif
+    
+    guard let credentialsProvider = 
+        AwsContainerRotatingCredentialsProvider.get(fromEnvironment: environment) else {
+            return Log.error("Unable to obtain credentials from the container environment.")
+    }
+```
