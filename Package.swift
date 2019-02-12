@@ -1,7 +1,6 @@
 // swift-tools-version:4.1
-// The swift-tools-version declares the minimum version of Swift required to build this package.
 //
-// Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // You may not use this file except in compliance with the License.

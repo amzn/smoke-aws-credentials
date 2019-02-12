@@ -6,8 +6,8 @@
         "repositoryURL": "https://github.com/IBM-Swift/LoggerAPI.git",
         "state": {
           "branch": null,
-          "revision": "5041f2673aa75d6e973d9b6bd3956bc5068387c8",
-          "version": "1.7.3"
+          "revision": "d0ccb4158b83f8692531892a9c894bb757593c6f",
+          "version": "1.8.0"
         }
       },
       {
@@ -15,8 +15,8 @@
         "repositoryURL": "https://github.com/amzn/smoke-aws.git",
         "state": {
           "branch": null,
-          "revision": "172f72a6a3b6e9a363ba620fb56d3ccbaa505587",
-          "version": "0.10.1"
+          "revision": "9cd24ed53324785ec37fcd63d46004f606b789fd",
+          "version": "0.16.32"
         }
       },
       {
@@ -24,8 +24,8 @@
         "repositoryURL": "https://github.com/amzn/smoke-http.git",
         "state": {
           "branch": null,
-          "revision": "4b79ecb01d74a6223811100d1907e63b68c0df75",
-          "version": "0.5.0"
+          "revision": "fdb9c0574e3fc404763b744e808100622f3a9ded",
+          "version": "0.7.0"
         }
       },
       {
@@ -33,8 +33,8 @@
         "repositoryURL": "https://github.com/apple/swift-nio.git",
         "state": {
           "branch": null,
-          "revision": "035962e6b6e03c8721a91a9b96dc084289795cb4",
-          "version": "1.11.0"
+          "revision": "98434c1f1d687ff5a24d2cabfbd19b5c7d2d7a2f",
+          "version": "1.13.0"
         }
       },
       {
@@ -42,8 +42,8 @@
         "repositoryURL": "https://github.com/apple/swift-nio-ssl.git",
         "state": {
           "branch": null,
-          "revision": "db16c3a90b101bb53b26a58867a344ad428072e0",
-          "version": "1.3.2"
+          "revision": "0f3999f3e3c359cc74480c292644c3419e44a12f",
+          "version": "1.4.0"
         }
       },
       {
