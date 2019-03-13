@@ -26,6 +26,29 @@ import LoggerAPI
 #endif
 
 /**
+ A protocol that retrieves `ExpiringCredentials` and that is closable.
+ */
+public protocol ExpiringCredentialsRetriever {
+    
+    /**
+     Gracefully shuts down this retriever. This function is idempotent and
+     will handle being called multiple times.
+     */
+    func close()
+
+    /**
+     Waits for the retriever to be closed. If close() is not called,
+     this will block forever.
+     */
+    func wait()
+    
+    /**
+     Retrieves a new instance of `ExpiringCredentials`.
+     */
+    func get() throws -> ExpiringCredentials
+}
+
+/**
  Class that manages the rotating credentials.
  */
 public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
@@ -52,16 +75,18 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     var currentWorker: (() -> ())?
     let completedSemaphore = DispatchSemaphore(value: 0)
     var statusMutex: pthread_mutex_t
+    let expiringCredentialsRetriever: ExpiringCredentialsRetriever
     
     /**
      Initializer that accepts the initial ExpiringCredentials instance for this provider.
      
      - Parameters:
-        - expiringCredentials: the initial ExpiringCredentials instance to use for this provider.
+        - expiringCredentialsRetriever: retriever of expiring credentials.
      */
-    public init(expiringCredentials: ExpiringCredentials) {
-        self.expiringCredentials = expiringCredentials
+    public init(expiringCredentialsRetriever: ExpiringCredentialsRetriever) throws {
+        self.expiringCredentials = try expiringCredentialsRetriever.get()
         self.currentWorker = nil
+        self.expiringCredentialsRetriever = expiringCredentialsRetriever
         self.status = .initialized
         var newMutux = pthread_mutex_t()
         
@@ -87,17 +112,18 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     /**
      Schedules credentials rotation to begin.
      */
-    public func start(beforeExpiration expiration: Date,
-                      roleSessionName: String?,
-                      credentialsRetriever: @escaping () throws -> ExpiringCredentials) {
+    public func start(roleSessionName: String?) {
         guard case .initialized = status else {
             // if this instance isn't in the initialized state, do nothing
             return
         }
         
-        scheduleUpdateCredentials(beforeExpiration: expiration,
-                                  roleSessionName: roleSessionName,
-                                  credentialsRetriever: credentialsRetriever)
+        // only actually need to start updating credentials if the
+        // initial ones expire
+        if let expiration = expiringCredentials.expiration {
+            scheduleUpdateCredentials(beforeExpiration: expiration,
+                                      roleSessionName: roleSessionName)
+        }
     }
     
     /**
@@ -112,6 +138,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         case .initialized:
             // no worker ever started, can just go straight to stopped
             status = .stopped
+            expiringCredentialsRetriever.close()
             completedSemaphore.signal()
         case .running:
             status = .shuttingDown
@@ -150,6 +177,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         
         guard case .running = status else {
             status = .stopped
+            expiringCredentialsRetriever.close()
             completedSemaphore.signal()
             return false
         }
@@ -158,8 +186,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     }
     
     private func scheduleUpdateCredentials(beforeExpiration expiration: Date,
-                                           roleSessionName: String?,
-                                           credentialsRetriever: @escaping () throws -> ExpiringCredentials) {
+                                           roleSessionName: String?) {
         // create a deadline 5 minutes before the expiration
         let timeInterval = (expiration - 300).timeIntervalSinceNow
         let timeInternalInMinutes = timeInterval / 60
@@ -186,7 +213,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
             
             let expiringCredentials: ExpiringCredentials
             do {
-               expiringCredentials = try credentialsRetriever()
+                expiringCredentials = try self.expiringCredentialsRetriever.get()
             } catch {
                 return Log.error("\(logEntryPrefix) rotation failed.")
             }
@@ -196,8 +223,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
             // if there is an expiry, schedule a rotation
             if let expiration = expiringCredentials.expiration {
                 self.scheduleUpdateCredentials(beforeExpiration: expiration,
-                                               roleSessionName: roleSessionName,
-                                                credentialsRetriever: credentialsRetriever)
+                                               roleSessionName: roleSessionName)
             }
         }
         

@@ -18,6 +18,7 @@
 import Foundation
 import SmokeAWSCore
 import SecurityTokenClient
+import SmokeHTTPClient
 import LoggerAPI
 
 public extension SmokeAWSCore.CredentialsProvider {
@@ -28,13 +29,18 @@ public extension SmokeAWSCore.CredentialsProvider {
      - Parameters:
         - roleArn: the ARN of the role that is to be assumed.
         - roleSessionName: the session name to use when assuming the role.
+        - retryConfiguration: the client retry configuration to use to get the credentials.
+                              If not present, the default configuration will be used.
      */
-    public func getAssumedStaticCredentials(roleArn: String,
-                                            roleSessionName: String) -> StaticCredentials? {
-        let securityTokenClient = AWSSecurityTokenClient(credentialsProvider: self)
-        
-        return securityTokenClient.getAssumedStaticCredentials(roleArn: roleArn,
-                                                               roleSessionName: roleSessionName)
+    public func getAssumedStaticCredentials(
+            roleArn: String,
+            roleSessionName: String,
+            retryConfiguration: HTTPClientRetryConfiguration = .default) -> StaticCredentials? {
+        return AWSSecurityTokenClient.getAssumedStaticCredentials(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            credentialsProvider: self,
+            retryConfiguration: retryConfiguration)
     }
     
     /**
@@ -46,14 +52,19 @@ public extension SmokeAWSCore.CredentialsProvider {
         - durationSeconds: The duration, in seconds, of the role session. The value can
             range from 900 seconds (15 minutes) to 3600 seconds (1 hour). By default, the value
             is set to 3600 seconds.
+        - retryConfiguration: the client retry configuration to use to get the credentials.
+                              If not present, the default configuration will be used.
      */
-    public func getAssumedRotatingCredentials(roleArn: String,
-                                              roleSessionName: String,
-                                              durationSeconds: Int?) -> StoppableCredentialsProvider? {
-        let securityTokenClient = AWSSecurityTokenClient(credentialsProvider: self)
-        
-        return securityTokenClient.getAssumedRotatingCredentials(roleArn: roleArn,
-                                                                 roleSessionName: roleSessionName,
-                                                                 durationSeconds: durationSeconds)
+    public func getAssumedRotatingCredentials(
+        roleArn: String,
+        roleSessionName: String,
+        durationSeconds: Int?,
+        retryConfiguration: HTTPClientRetryConfiguration = .default) -> StoppableCredentialsProvider? {
+        return AWSSecurityTokenClient.getAssumedRotatingCredentials(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            credentialsProvider: self,
+            durationSeconds: durationSeconds,
+            retryConfiguration: retryConfiguration)
     }
 }

@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-//  AwsContainerRotatingCredentials+getCredentials.swift
+//  AwsContainerRotatingCredentials+get.swift
 //  SmokeAWSCredentials
 //
 
@@ -198,27 +198,36 @@ public extension AwsContainerRotatingCredentialsProvider {
     private static func createRotatingCredentialsProvider(
         dataRetriever: @escaping () throws -> Data) throws
         -> StoppableCredentialsProvider {
-        let expiringCredentials = try ExpiringCredentials.getCurrentCredentials(dataRetriever: dataRetriever)
-        
-        let awsContainerRotatingCredentialsProvider =
-            AwsContainerRotatingCredentialsProvider(expiringCredentials: expiringCredentials)
-        
-        // if there is an expiry, schedule a rotation
-        if let expiration = expiringCredentials.expiration {
-            func credentialsRetriever() throws -> ExpiringCredentials {
-                return try ExpiringCredentials.getCurrentCredentials(
-                    dataRetriever: dataRetriever)
-            }
+        let credentialsRetriever = FromDataExpiringCredentialsRetriever(
+            dataRetriever: dataRetriever)
             
-            awsContainerRotatingCredentialsProvider.start(
-                beforeExpiration: expiration,
-                roleSessionName: nil,
-                credentialsRetriever: credentialsRetriever)
-        }
+        let awsContainerRotatingCredentialsProvider =
+            try AwsContainerRotatingCredentialsProvider(
+                expiringCredentialsRetriever: credentialsRetriever)
+        
+        awsContainerRotatingCredentialsProvider.start(
+            roleSessionName: nil)
         
         Log.verbose("Rotating credentials retrieved from environment.")
         
         // return the credentials
         return awsContainerRotatingCredentialsProvider
+    }
+    
+    internal struct FromDataExpiringCredentialsRetriever: ExpiringCredentialsRetriever {
+        let dataRetriever: () throws -> Data
+        
+        func close() {
+            // nothing to do
+        }
+        
+        func wait() {
+            // nothing to do
+        }
+        
+        func get() throws -> ExpiringCredentials {
+            return try ExpiringCredentials.getCurrentCredentials(
+                    dataRetriever: dataRetriever)
+        }
     }
 }
