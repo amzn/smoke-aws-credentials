@@ -110,6 +110,9 @@ extension SecurityTokenClientProtocol {
         let securityTokenClient = AWSSecurityTokenClient(
             credentialsProvider: credentialsProvider,
             retryConfiguration: retryConfiguration)
+        defer {
+            securityTokenClient.close()
+        }
         
         let delegatedCredentials: ExpiringCredentials
         do {
@@ -122,8 +125,6 @@ extension SecurityTokenClientProtocol {
     
             return nil
         }
-        
-        securityTokenClient.close()
         
         return StaticCredentials(accessKeyId: delegatedCredentials.accessKeyId,
                                  secretAccessKey: delegatedCredentials.secretAccessKey,
