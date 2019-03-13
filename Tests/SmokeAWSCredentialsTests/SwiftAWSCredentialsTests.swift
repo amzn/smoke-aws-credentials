@@ -19,6 +19,7 @@ import XCTest
 @testable import SmokeAWSCredentials
 import SecurityTokenClient
 import SecurityTokenModel
+import SmokeHTTPClient
 import SmokeAWSCore
 
 @available(OSX 10.12, *)
@@ -57,32 +58,63 @@ class SmokeAWSCredentialsTests: XCTestCase {
         return assumeRoleSync
     }
     
-    func testRotatingGetCredentials() {
-        let client = MockSecurityTokenClient(assumeRoleSync: getAssumeRoleSync())
-        guard let delegatedRotatingCredentials =
-            client.getAssumedRotatingCredentials(roleArn: "arn:aws:iam::XXXXXXXXXXXX:role/theRole",
-                                                 roleSessionName: "mySession", durationSeconds: 3600) else {
-                                                    return XCTFail()
+    struct TestExpiringCredentialsRetriever: ExpiringCredentialsRetriever {
+        let client: MockSecurityTokenClient
+        let roleArn: String
+        let roleSessionName: String
+        let durationSeconds: Int?
+        
+        init(assumeRoleSyncOverride: @escaping SecurityTokenClientProtocol.AssumeRoleSyncType,
+             roleArn: String,
+             roleSessionName: String,
+             durationSeconds: Int?,
+             retryConfiguration: HTTPClientRetryConfiguration) {
+            self.client = MockSecurityTokenClient(assumeRoleSync: assumeRoleSyncOverride)
+            self.roleArn = roleArn
+            self.roleSessionName = roleSessionName
+            self.durationSeconds = durationSeconds
         }
         
-        let credentials = delegatedRotatingCredentials.credentials
+        func close() {
+            
+        }
+        
+        func wait() {
+            
+        }
+        
+        func get() throws -> ExpiringCredentials {
+            return try client.getAssumedExpiringCredentials(
+                        roleArn: roleArn,
+                        roleSessionName: roleSessionName,
+                        durationSeconds: durationSeconds)
+        }
+    }
+    
+    func testRotatingGetCredentials() throws {
+        let credentialsRetriever = TestExpiringCredentialsRetriever(
+            assumeRoleSyncOverride: getAssumeRoleSync(),
+            roleArn: "arn:aws:iam::XXXXXXXXXXXX:role/theRole",
+            roleSessionName: "mySession",
+            durationSeconds: 3600,
+            retryConfiguration: .default)
+        
+        let credentials = try credentialsRetriever.get()
         XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
         XCTAssertEqual(TestVariables.secretAccessKey, credentials.secretAccessKey)
         XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)
         
-        delegatedRotatingCredentials.stop()
-        delegatedRotatingCredentials.wait()
+        credentialsRetriever.close()
+        credentialsRetriever.wait()
     }
     
-    func testStaticGetCredentials() {
+    func testStaticGetCredentials() throws {
         let client = MockSecurityTokenClient(assumeRoleSync: getAssumeRoleSync())
-        guard let delegatedRotatingCredentials =
-            client.getAssumedStaticCredentials(roleArn: "arn:aws:iam::XXXXXXXXXXXX:role/theRole",
-                                               roleSessionName: "mySession") else {
-                                                return XCTFail()
-        }
         
-        let credentials = delegatedRotatingCredentials.credentials
+        let credentials = try client.getAssumedExpiringCredentials(
+                roleArn: "arn:aws:iam::XXXXXXXXXXXX:role/theRole",
+                roleSessionName: "mySession",
+                durationSeconds: nil)
         XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
         XCTAssertEqual(TestVariables.secretAccessKey, credentials.secretAccessKey)
         XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)

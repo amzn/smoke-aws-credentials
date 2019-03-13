@@ -38,7 +38,9 @@ internal struct AWSSTSExpiringCredentialsRetriever: ExpiringCredentialsRetriever
          roleSessionName: String,
          durationSeconds: Int?,
          retryConfiguration: HTTPClientRetryConfiguration) {
-        self.client = AWSSecurityTokenClient(credentialsProvider: credentialsProvider)
+        self.client = AWSSecurityTokenClient(
+            credentialsProvider: credentialsProvider,
+            retryConfiguration: retryConfiguration)
         self.roleArn = roleArn
         self.roleSessionName = roleSessionName
         self.durationSeconds = durationSeconds
