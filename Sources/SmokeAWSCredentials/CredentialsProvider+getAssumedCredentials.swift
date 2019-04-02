@@ -59,12 +59,14 @@ public extension SmokeAWSCore.CredentialsProvider {
         roleArn: String,
         roleSessionName: String,
         durationSeconds: Int?,
-        retryConfiguration: HTTPClientRetryConfiguration = .default) -> StoppableCredentialsProvider? {
+        retryConfiguration: HTTPClientRetryConfiguration = .default,
+        eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads) -> StoppableCredentialsProvider? {
         return AWSSecurityTokenClient.getAssumedRotatingCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             credentialsProvider: self,
             durationSeconds: durationSeconds,
-            retryConfiguration: retryConfiguration)
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider)
     }
 }

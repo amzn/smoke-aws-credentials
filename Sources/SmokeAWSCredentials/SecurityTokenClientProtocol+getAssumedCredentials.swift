@@ -37,10 +37,12 @@ internal struct AWSSTSExpiringCredentialsRetriever: ExpiringCredentialsRetriever
          roleArn: String,
          roleSessionName: String,
          durationSeconds: Int?,
-         retryConfiguration: HTTPClientRetryConfiguration) {
+         retryConfiguration: HTTPClientRetryConfiguration,
+         eventLoopProvider: HTTPClient.EventLoopProvider) {
         self.client = AWSSecurityTokenClient(
             credentialsProvider: credentialsProvider,
-            retryConfiguration: retryConfiguration)
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider)
         self.roleArn = roleArn
         self.roleSessionName = roleSessionName
         self.durationSeconds = durationSeconds
@@ -139,13 +141,15 @@ extension SecurityTokenClientProtocol {
         roleSessionName: String,
         credentialsProvider: CredentialsProvider,
         durationSeconds: Int?,
-        retryConfiguration: HTTPClientRetryConfiguration) -> StoppableCredentialsProvider? {
+        retryConfiguration: HTTPClientRetryConfiguration,
+        eventLoopProvider: HTTPClient.EventLoopProvider) -> StoppableCredentialsProvider? {
         let credentialsRetriever = AWSSTSExpiringCredentialsRetriever(
             credentialsProvider: credentialsProvider,
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             durationSeconds: durationSeconds,
-            retryConfiguration: retryConfiguration)
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider)
         
         let delegatedRotatingCredentials: AwsRotatingCredentialsProvider
         do {
@@ -163,9 +167,6 @@ extension SecurityTokenClientProtocol {
     }
 }
 
-@available(OSX 10.12, *)
-private let iso8601DateFormatter = ISO8601DateFormatter()
-
 private extension String {
     /**
      Returns a date instance if this string is formatted according to
@@ -173,7 +174,7 @@ private extension String {
      */
     var dateFromISO8601String: Date? {
         if #available(OSX 10.12, *) {
-            return iso8601DateFormatter.date(from: self)
+            return ISO8601DateFormatter().date(from: self)
         } else {
             fatalError("Attempting to use ISO8601DateFormatter on an unsupported macOS version.")
         }

@@ -18,6 +18,7 @@
 import Foundation
 import SmokeAWSCore
 import LoggerAPI
+import SmokeHTTPClient
 
 public typealias AwsContainerRotatingCredentialsProvider = AwsRotatingCredentialsProvider
 
@@ -50,13 +51,15 @@ public extension AwsContainerRotatingCredentialsProvider {
      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI key or if that key isn't present,
      static credentials under the AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID keys.
      */
-    public static func get(fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment)
+    public static func get(fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
+                           eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads)
         -> StoppableCredentialsProvider? {
             let dataRetrieverProvider: (String) -> () throws -> Data = { credentialsPath in
                 return {
                     guard let response = try BasicChannelInboundHandler.call(
                         endpointHostName: credentialsHost,
                         endpointPath: credentialsPath,
+                        eventLoopProvider: eventLoopProvider,
                         endpointPort: credentialsPort) else {
                             let reason = "Unable to retrieve credentials: No credentials returned from endpoint"
                                 + " '\(credentialsHost):\(credentialsPort)/\(credentialsPath)'."

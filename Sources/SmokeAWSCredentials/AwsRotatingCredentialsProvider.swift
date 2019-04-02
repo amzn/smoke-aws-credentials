@@ -62,7 +62,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     }
     
     private var expiringCredentials: ExpiringCredentials
-    let queue = DispatchQueue.global()
+    static let queue = DispatchQueue(label: "com.amazon.SmokeAWSCredentials.AwsRotatingCredentialsProvider")
     
     public enum Status {
         case initialized
@@ -228,7 +228,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         }
         
         Log.info("\(logEntryPrefix) updated; rotation scheduled in \(hours) hours, \(minutes) minutes.")
-        queue.asyncAfter(deadline: deadline, execute: newWorker)
+        AwsRotatingCredentialsProvider.queue.asyncAfter(deadline: deadline, execute: newWorker)
         
         pthread_mutex_lock(&statusMutex)
         defer { pthread_mutex_unlock(&statusMutex) }

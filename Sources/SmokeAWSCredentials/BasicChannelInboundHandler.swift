@@ -19,6 +19,8 @@ import Foundation
 import NIO
 import NIOHTTP1
 import LoggerAPI
+import SmokeHTTPClient
+import NIOFoundationCompat
 
 enum BasicHttpChannelError: Error {
     case invalidEndpoint(String)
@@ -41,8 +43,8 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
     
     /// The http head of the response received
     private var responseHead: HTTPResponseHead?
-    /// The list of previous body ByteBuffers received.
-    private var bodyParts: [ByteBuffer] = []
+    /// The body data previously received.
+    public var partialBody: Data?
     
     init(endpointHostName: String, endpointPath: String) {
         self.endpointHostName = endpointHostName
@@ -51,22 +53,32 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
     
     static func call(endpointHostName: String,
                      endpointPath: String,
-                     endpointPort: Int = 80) throws -> Data? {
+                     eventLoopProvider: HTTPClient.EventLoopProvider,
+                     endpointPort: Int = 80
+                     ) throws -> Data? {
         let handler = BasicChannelInboundHandler(endpointHostName: endpointHostName,
                                                  endpointPath: endpointPath)
         
-        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        defer {
-            // shut down the event loop group when we are done
-            // (as this function will block until the request is complete)
-            do {
-                try eventLoopGroup.syncShutdownGracefully()
-            } catch {
-                Log.debug("Unable to shut down event loop group: \(error)")
+        let eventLoopGroup: EventLoopGroup
+            
+        switch eventLoopProvider {
+        case .spawnNewThreads:
+            eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            defer {
+                // shut down the event loop group when we are done
+                // (as this function will block until the request is complete)
+                do {
+                    try eventLoopGroup.syncShutdownGracefully()
+                } catch {
+                    Log.debug("Unable to shut down event loop group: \(error)")
+                }
             }
+        case .use(let existingEventLoopGroup):
+            eventLoopGroup = existingEventLoopGroup
         }
         
         let bootstrap = ClientBootstrap(group: eventLoopGroup)
+            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .channelInitializer { channel in
                 channel.pipeline.addHTTPClientHandlers().then {
                     channel.pipeline.add(handler: handler)
@@ -86,22 +98,30 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
      Called when data has been received from the channel.
      */
     public func channelRead(ctx: ChannelHandlerContext, data: NIOAny) {
-        Log.verbose("channelRead")
         let responsePart = self.unwrapInboundIn(data)
         
         switch responsePart {
         // This is the response head
-        case .head(let request):
-            Log.verbose("channelRead: head")
-            responseHead = request
+        case .head(let response):
+            Log.verbose("Response head received.")
+            responseHead = response
         // This is part of the response body
-        case .body(let byteBuffer):
-            Log.verbose("channelRead: body")
-            // store this part of the body
-            bodyParts.append(byteBuffer)
+        case .body(var byteBuffer):
+            let byteBufferSize = byteBuffer.readableBytes
+            let newData = byteBuffer.readData(length: byteBufferSize)
+            
+            if var newPartialBody = partialBody,
+                let newData = newData {
+                    newPartialBody += newData
+                    partialBody = newPartialBody
+            } else if let newData = newData {
+                partialBody = newData
+            }
+            
+            Log.verbose("Response body part of \(byteBufferSize) bytes received.")
         // This is the response end
         case .end:
-            Log.verbose("channelRead: end")
+            Log.verbose("Response end received.")
             // the head and all possible body parts have been received,
             // handle this response
             ctx.close(promise: nil)
@@ -116,18 +136,7 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
      Gets the response from the handler
      */
     public func getResponse() throws -> Data? {
-        // concatenate any parts into a single byte array
-        let bodyBytes: [UInt8] = bodyParts.reduce([]) { (partialBytes, part) in
-            let partBytes = part.getBytes(at: 0, length: part.readableBytes)
-            
-            if let partBytes = partBytes {
-                return partialBytes + partBytes
-            } else {
-                return partialBytes
-            }
-        }
-        
-        let responseBodyData = !bodyBytes.isEmpty ? Data(bytes: bodyBytes) : nil
+        Log.verbose("Handling response body with \(partialBody?.count ?? 0) size.")
         
         // ensure the response head from received
         guard let responseHead = responseHead else {
@@ -137,11 +146,11 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
         // if the response status is ok
         if case .ok = responseHead.status {
             // return the response data (potentially empty)
-            return responseBodyData
+            return partialBody
         }
         
         let bodyAsString: String?
-        if let responseBodyData = responseBodyData {
+        if let responseBodyData = partialBody {
             bodyAsString = String(data: responseBodyData, encoding: .utf8)
         } else {
             bodyAsString = nil
