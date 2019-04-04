@@ -18,19 +18,16 @@ import PackageDescription
 let package = Package(
     name: "SmokeAWSCredentials",
     products: [
-        // Products define the executables and libraries produced by a package, and make them visible to other packages.
         .library(
             name: "SmokeAWSCredentials",
             targets: ["SmokeAWSCredentials"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/amzn/smoke-aws.git", .upToNextMajor(from: "0.19.7")),
+        .package(url: "https://github.com/amzn/smoke-aws.git", .upToNextMajor(from: "1.0.0")),
         .package(url: "https://github.com/IBM-Swift/LoggerAPI.git", .upToNextMajor(from: "1.0.0")),
         .package(url: "https://github.com/apple/swift-nio.git", from: "1.0.0"),
     ],
     targets: [
-        // Targets are the basic building blocks of a package. A target can define a module or a test suite.
-        // Targets can depend on other targets in this package, and on products in packages which this package depends on.
         .target(
             name: "SmokeAWSCredentials",
             dependencies: ["SecurityTokenClient", "NIO", "NIOHTTP1", "NIOFoundationCompat", "LoggerAPI"]),
