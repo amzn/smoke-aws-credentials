@@ -64,7 +64,12 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
         switch eventLoopProvider {
         case .spawnNewThreads:
             eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-            defer {
+        case .use(let existingEventLoopGroup):
+            eventLoopGroup = existingEventLoopGroup
+        }
+        
+        defer {
+            if case .spawnNewThreads = eventLoopProvider {
                 // shut down the event loop group when we are done
                 // (as this function will block until the request is complete)
                 do {
@@ -73,8 +78,6 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
                     Log.debug("Unable to shut down event loop group: \(error)")
                 }
             }
-        case .use(let existingEventLoopGroup):
-            eventLoopGroup = existingEventLoopGroup
         }
         
         let bootstrap = ClientBootstrap(group: eventLoopGroup)
