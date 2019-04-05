@@ -34,7 +34,7 @@ to your Package.swift and depend on the `SmokeAWSCredentials` target from this p
 
 ```
 dependencies: [
-    .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "0.6.0"))
+    .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "1.0.0"))
 ]
 ```
 
@@ -111,3 +111,7 @@ For convenience, `AwsContainerRotatingCredentialsProvider.get` optionally accept
             return Log.error("Unable to obtain credentials from the container environment.")
     }
 ```
+
+## License
+
+This library is licensed under the Apache 2.0 License.
