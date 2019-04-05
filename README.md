@@ -32,10 +32,14 @@ This package provides two mechanisms for obtaining credentials-
 SmokeAWSCredentials uses the Swift Package Manager. To use the framework, add the following dependency
 to your Package.swift and depend on the `SmokeAWSCredentials` target from this package-
 
-```
+```swift
 dependencies: [
     .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "1.0.0"))
 ]
+
+.target(
+    name: ...,
+    dependencies: [..., "SmokeAWSCredentials"]),
 ```
 
 ## Step 2: Obtain a credentials provider from a container environment such as Elastic Container Service (ECS)
