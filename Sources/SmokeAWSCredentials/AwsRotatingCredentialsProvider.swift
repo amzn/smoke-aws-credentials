@@ -64,6 +64,10 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     private var expiringCredentials: ExpiringCredentials
     static let queue = DispatchQueue(label: "com.amazon.SmokeAWSCredentials.AwsRotatingCredentialsProvider")
     
+    let expirationBufferSeconds = 300.0 // 5 minutes
+    let validCredentialsRetrySeconds = 60.0 // 1 minute
+    let invalidCredentialsRetrySeconds = 3600.0 // 1 hour
+    
     public enum Status {
         case initialized
         case running
@@ -188,7 +192,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     private func scheduleUpdateCredentials(beforeExpiration expiration: Date,
                                            roleSessionName: String?) {
         // create a deadline 5 minutes before the expiration
-        let timeInterval = (expiration - 300).timeIntervalSinceNow
+        let timeInterval = (expiration - expirationBufferSeconds).timeIntervalSinceNow
         let timeInternalInMinutes = timeInterval / 60
         
         let minutes: Int = Int(timeInternalInMinutes) % 60
@@ -211,17 +215,43 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
             
             Log.verbose("\(logEntryPrefix) about to expire; rotating.")
             
-            let expiringCredentials: ExpiringCredentials
+            let expiration: Date?
             do {
-                expiringCredentials = try self.expiringCredentialsRetriever.get()
+                let expiringCredentials = try self.expiringCredentialsRetriever.get()
+                
+                self.expiringCredentials = expiringCredentials
+                
+                expiration = expiringCredentials.expiration
             } catch {
-                return Log.error("\(logEntryPrefix) rotation failed.")
+                let timeIntervalSinceNow =
+                    self.expiringCredentials.expiration?.timeIntervalSinceNow ?? 0
+                
+                let retryDuration: Double
+                let logPrefix = "\(logEntryPrefix) rotation failed."
+                
+                // if the expiry of the current credentials is still in the future
+                if timeIntervalSinceNow > 0 {
+                    // try again relatively soon (still within the 5 minute credentials
+                    // expirary buffer) to get new credentials
+                    retryDuration = self.validCredentialsRetrySeconds
+                    
+                    Log.warning("\(logPrefix) Credentials still valid. "
+                        + "Attempting credentials refresh in 1 minute.")
+                } else {
+                    // at this point, we have tried multiple times to get new credentials
+                    // something is quite wrong; try again in the future but at
+                    // a reduced frequency
+                    retryDuration = self.invalidCredentialsRetrySeconds
+                    
+                    Log.error("\(logPrefix) Credentials no longer valid. "
+                        + "Attempting credentials refresh in 1 hour.")
+                }
+                
+                expiration = Date(timeIntervalSinceNow: retryDuration)
             }
             
-            self.expiringCredentials = expiringCredentials
-            
             // if there is an expiry, schedule a rotation
-            if let expiration = expiringCredentials.expiration {
+            if let expiration = expiration {
                 self.scheduleUpdateCredentials(beforeExpiration: expiration,
                                                roleSessionName: roleSessionName)
             }

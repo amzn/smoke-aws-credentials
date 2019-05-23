@@ -167,7 +167,7 @@ extension SecurityTokenClientProtocol {
     }
 }
 
-private extension String {
+internal extension String {
     /**
      Returns a date instance if this string is formatted according to
      ISO 8601 or nil otherwise. Used to schedule credential rotation.

@@ -35,12 +35,12 @@ struct TestVariables {
     static let arn = "ARN"
     static let assumedRoleId = "assumedRoleId"
     static let accessKeyId = "accessKeyId"
-    static let expiration = "2118-03-12T20:29:09Z"
+    static let expiration = "4118-03-12T20:29:09Z"
     static let secretAccessKey = "secretAccessKey"
     static let sessionToken = "sessionToken"
 }
 
-let expiration = Date(timeIntervalSince1970: 1522283216)
+let expiration = TestVariables.expiration.dateFromISO8601String!
 let expiringCredentials = ExpiringCredentials(accessKeyId: TestVariables.accessKeyId,
                                               expiration: expiration,
                                               secretAccessKey: TestVariables.secretAccessKey,

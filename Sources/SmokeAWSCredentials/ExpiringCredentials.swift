@@ -27,6 +27,8 @@ public struct ExpiringCredentials: Codable, SmokeAWSCore.Credentials {
     public let secretAccessKey: String
     public let sessionToken: String?
     
+    private static let nullString = "null"
+    
     private static let jsonDecoder: JSONDecoder = {
         let jsonDecoder = JSONDecoder()
 
@@ -82,6 +84,23 @@ public struct ExpiringCredentials: Codable, SmokeAWSCore.Credentials {
     static func getCurrentCredentials(dataRetriever: () throws -> Data) throws -> ExpiringCredentials {
         let data = try dataRetriever()
         
-        return try jsonDecoder.decode(ExpiringCredentials.self, from: data)
+        let expiringCredentials = try jsonDecoder.decode(ExpiringCredentials.self, from: data)
+        
+        // ensure we are not getting junk credentials data
+        guard expiringCredentials.accessKeyId != nullString,
+            expiringCredentials.secretAccessKey != nullString,
+            expiringCredentials.sessionToken != nullString else {
+                let dataString = String(data: data, encoding: .utf8) ?? ""
+                
+                let reason = "Invalid credentials received: " + dataString
+                throw SmokeAWSCredentialsError.missingCredentials(reason: reason)
+        }
+        
+        if let expiration = expiringCredentials.expiration, expiration.timeIntervalSinceNow < 0 {
+            let reason = "Invalid credentials received: Expiration received that is already expired '\(expiration)'"
+            throw SmokeAWSCredentialsError.missingCredentials(reason: reason)
+        }
+        
+        return expiringCredentials
     }
 }
