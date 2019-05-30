@@ -25,6 +25,14 @@ import LoggerAPI
 	import Darwin
 #endif
 
+internal protocol AsyncAfterScheduler {
+    func asyncAfter(deadline: DispatchTime, qos: DispatchQoS,
+                    flags: DispatchWorkItemFlags,
+                    execute work: @escaping @convention(block) () -> Void)
+}
+
+extension DispatchQueue: AsyncAfterScheduler {}
+
 /**
  A protocol that retrieves `ExpiringCredentials` and that is closable.
  */
@@ -80,6 +88,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     let completedSemaphore = DispatchSemaphore(value: 0)
     var statusMutex: pthread_mutex_t
     let expiringCredentialsRetriever: ExpiringCredentialsRetriever
+    let scheduler: AsyncAfterScheduler
     
     /**
      Initializer that accepts the initial ExpiringCredentials instance for this provider.
@@ -87,10 +96,17 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
      - Parameters:
         - expiringCredentialsRetriever: retriever of expiring credentials.
      */
-    public init(expiringCredentialsRetriever: ExpiringCredentialsRetriever) throws {
+    public convenience init(expiringCredentialsRetriever: ExpiringCredentialsRetriever) throws {
+        try self.init(expiringCredentialsRetriever: expiringCredentialsRetriever,
+                      scheduler: AwsRotatingCredentialsProvider.queue)
+    }
+    
+    internal init(expiringCredentialsRetriever: ExpiringCredentialsRetriever,
+                  scheduler: AsyncAfterScheduler) throws {
         self.expiringCredentials = try expiringCredentialsRetriever.get()
         self.currentWorker = nil
         self.expiringCredentialsRetriever = expiringCredentialsRetriever
+        self.scheduler = scheduler
         self.status = .initialized
         var newMutux = pthread_mutex_t()
         
@@ -189,8 +205,8 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         return true
     }
     
-    private func scheduleUpdateCredentials(beforeExpiration expiration: Date,
-                                           roleSessionName: String?) {
+    internal func scheduleUpdateCredentials(beforeExpiration expiration: Date,
+                                            roleSessionName: String?) {
         // create a deadline 5 minutes before the expiration
         let timeInterval = (expiration - expirationBufferSeconds).timeIntervalSinceNow
         let timeInternalInMinutes = timeInterval / 60
@@ -258,7 +274,8 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         }
         
         Log.info("\(logEntryPrefix) updated; rotation scheduled in \(hours) hours, \(minutes) minutes.")
-        AwsRotatingCredentialsProvider.queue.asyncAfter(deadline: deadline, execute: newWorker)
+        scheduler.asyncAfter(deadline: deadline, qos: .unspecified,
+                             flags: [], execute: newWorker)
         
         pthread_mutex_lock(&statusMutex)
         defer { pthread_mutex_unlock(&statusMutex) }
