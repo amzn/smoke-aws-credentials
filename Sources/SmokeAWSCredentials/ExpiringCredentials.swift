@@ -96,7 +96,7 @@ public struct ExpiringCredentials: Codable, SmokeAWSCore.Credentials {
                 throw SmokeAWSCredentialsError.missingCredentials(reason: reason)
         }
         
-        if let expiration = expiringCredentials.expiration, expiration.timeIntervalSinceNow < 0 {
+        if let expiration = expiringCredentials.expiration, expiration.timeIntervalSinceNow <= 0 {
             let reason = "Invalid credentials received: Expiration received that is already expired '\(expiration)'"
             throw SmokeAWSCredentialsError.missingCredentials(reason: reason)
         }
