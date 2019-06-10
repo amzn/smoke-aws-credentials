@@ -35,13 +35,24 @@ struct TestVariables {
     static let arn = "ARN"
     static let assumedRoleId = "assumedRoleId"
     static let accessKeyId = "accessKeyId"
-    static let expiration = "2118-03-12T20:29:09Z"
+    static let expiration = "4118-03-12T20:29:09Z"
+    static let pastExpiration = "1918-03-12T20:29:09Z"
     static let secretAccessKey = "secretAccessKey"
     static let sessionToken = "sessionToken"
+    static let nullString = "null"
 }
 
-let expiration = Date(timeIntervalSince1970: 1522283216)
+let expiration = TestVariables.expiration.dateFromISO8601String!
+let pastExpiration = TestVariables.pastExpiration.dateFromISO8601String!
 let expiringCredentials = ExpiringCredentials(accessKeyId: TestVariables.accessKeyId,
                                               expiration: expiration,
+                                              secretAccessKey: TestVariables.secretAccessKey,
+                                              sessionToken: TestVariables.sessionToken)
+let invalidCredentials1 = ExpiringCredentials(accessKeyId: TestVariables.nullString,
+                                              expiration: expiration,
+                                              secretAccessKey: TestVariables.nullString,
+                                              sessionToken: TestVariables.nullString)
+let invalidCredentials2 = ExpiringCredentials(accessKeyId: TestVariables.accessKeyId,
+                                              expiration: pastExpiration,
                                               secretAccessKey: TestVariables.secretAccessKey,
                                               sessionToken: TestVariables.sessionToken)
