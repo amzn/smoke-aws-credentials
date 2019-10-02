@@ -155,8 +155,8 @@ public extension AwsContainerRotatingCredentialsProvider {
                               "-d",
                               "900"]
             task.standardOutput = outputPipe
-            #if os(Linux) && (swift(>=5.0) || (swift(>=4.1.50) && !swift(>=4.2)) || (swift(>=3.5) && !swift(>=4.0)))
-            task.run()
+            #if os(Linux) && swift(>=5.0)
+            try task.run()
             #else
             task.launch()
             #endif
