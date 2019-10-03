@@ -43,7 +43,7 @@ public extension AwsContainerRotatingCredentialsProvider {
      This script should write to its standard output a JSON structure capable of
      being decoded into the ExpiringCredentials structure.
      */
-    public static let devIamRoleArnEnvironmentVariable = "DEV_CREDENTIALS_IAM_ROLE_ARN"
+    static let devIamRoleArnEnvironmentVariable = "DEV_CREDENTIALS_IAM_ROLE_ARN"
  
     /**
      Static function that retrieves credentials provider from the specified environment -
@@ -51,7 +51,7 @@ public extension AwsContainerRotatingCredentialsProvider {
      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI key or if that key isn't present,
      static credentials under the AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID keys.
      */
-    public static func get(fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
+    static func get(fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
                            eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads)
         -> StoppableCredentialsProvider? {
             let dataRetrieverProvider: (String) -> () throws -> Data = { credentialsPath in
@@ -144,14 +144,22 @@ public extension AwsContainerRotatingCredentialsProvider {
             let outputPipe = Pipe()
             
             let task = Process()
+            #if os(Linux) && (swift(>=5.0) || (swift(>=4.1.50) && !swift(>=4.2)) || (swift(>=3.5) && !swift(>=4.0)))
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            #else
             task.launchPath = "/usr/bin/env"
+            #endif
             task.arguments = ["/usr/local/bin/get-credentials.sh",
                               "-r",
                               iamRoleArn,
                               "-d",
                               "900"]
             task.standardOutput = outputPipe
+            #if os(Linux) && swift(>=5.0)
+            try task.run()
+            #else
             task.launch()
+            #endif
             task.waitUntilExit()
 
             return outputPipe.fileHandleForReading.availableData
