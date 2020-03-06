@@ -14,12 +14,12 @@
 //  BasicChannelInboundHandler.swift
 //  SmokeAWSCredentials
 //
-
 import Foundation
 import NIO
 import NIOHTTP1
-import LoggerAPI
+import Logging
 import SmokeHTTPClient
+import SmokeAWSCore
 import NIOFoundationCompat
 
 enum BasicHttpChannelError: Error {
@@ -33,31 +33,36 @@ enum BasicHttpChannelError: Error {
  A basic ChannelInboundHandler for contacting an endpoint and
  returning the response as a Data instance.
  */
-final class BasicChannelInboundHandler: ChannelInboundHandler {
+final class BasicChannelInboundHandler<InvocationReportingType: SmokeAWSInvocationReporting>: ChannelInboundHandler {
     public typealias InboundIn = HTTPClientResponsePart
     public typealias OutboundOut = HTTPClientRequestPart
     
     /// The endpoint path to request a response from.
     private let endpointPath: String
     private let endpointHostName: String
+    private let reporting: InvocationReportingType
     
     /// The http head of the response received
     private var responseHead: HTTPResponseHead?
     /// The body data previously received.
     public var partialBody: Data?
     
-    init(endpointHostName: String, endpointPath: String) {
+    init(endpointHostName: String, endpointPath: String,
+         reporting: InvocationReportingType) {
         self.endpointHostName = endpointHostName
         self.endpointPath = endpointPath
+        self.reporting = reporting
     }
     
     static func call(endpointHostName: String,
                      endpointPath: String,
+                     reporting: InvocationReportingType,
                      eventLoopProvider: HTTPClient.EventLoopProvider,
                      endpointPort: Int = 80
                      ) throws -> Data? {
         let handler = BasicChannelInboundHandler(endpointHostName: endpointHostName,
-                                                 endpointPath: endpointPath)
+                                                 endpointPath: endpointPath,
+                                                 reporting: reporting)
         
         let eventLoopGroup: EventLoopGroup
             
@@ -75,7 +80,7 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
                 do {
                     try eventLoopGroup.syncShutdownGracefully()
                 } catch {
-                    Log.debug("Unable to shut down event loop group: \(error)")
+                    reporting.logger.debug("Unable to shut down event loop group: \(error)")
                 }
             }
         }
@@ -83,8 +88,8 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
         let bootstrap = ClientBootstrap(group: eventLoopGroup)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
             .channelInitializer { channel in
-                channel.pipeline.addHTTPClientHandlers().then {
-                    channel.pipeline.add(handler: handler)
+                channel.pipeline.addHTTPClientHandlers().flatMap {
+                    channel.pipeline.addHandler(handler)
                 }
             }
         
@@ -100,13 +105,13 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
     /**
      Called when data has been received from the channel.
      */
-    public func channelRead(ctx: ChannelHandlerContext, data: NIOAny) {
+    public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let responsePart = self.unwrapInboundIn(data)
         
         switch responsePart {
         // This is the response head
         case .head(let response):
-            Log.verbose("Response head received.")
+            reporting.logger.debug("Response head received.")
             responseHead = response
         // This is part of the response body
         case .body(var byteBuffer):
@@ -121,25 +126,25 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
                 partialBody = newData
             }
             
-            Log.verbose("Response body part of \(byteBufferSize) bytes received.")
+            reporting.logger.debug("Response body part of \(byteBufferSize) bytes received.")
         // This is the response end
         case .end:
-            Log.verbose("Response end received.")
+            reporting.logger.debug("Response end received.")
             // the head and all possible body parts have been received,
             // handle this response
-            ctx.close(promise: nil)
+            context.close(promise: nil)
         }
     }
     
-    func channelReadComplete(ctx: ChannelHandlerContext) {
-        Log.verbose("channelReadComplete")
+    func channelReadComplete(context: ChannelHandlerContext) {
+        reporting.logger.debug("channelReadComplete")
     }
     
     /*
      Gets the response from the handler
      */
     public func getResponse() throws -> Data? {
-        Log.verbose("Handling response body with \(partialBody?.count ?? 0) size.")
+        reporting.logger.debug("Handling response body with \(partialBody?.count ?? 0) size.")
         
         // ensure the response head from received
         guard let responseHead = responseHead else {
@@ -165,18 +170,18 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
     /**
      Called when notifying about a connection error.
      */
-    public func errorCaught(ctx: ChannelHandlerContext, error: Error) {
-        Log.verbose("Error received from HTTP connection: \(String(describing: error))")
+    public func errorCaught(context: ChannelHandlerContext, error: Error) {
+        reporting.logger.debug("Error received from HTTP connection: \(String(describing: error))")
         
         // close the channel
-        ctx.close(promise: nil)
+        context.close(promise: nil)
     }
     
     /**
      Called when the channel becomes active.
      */
-    public func channelActive(ctx: ChannelHandlerContext) {
-        Log.verbose("channelActive")
+    public func channelActive(context: ChannelHandlerContext) {
+        reporting.logger.debug("channelActive")
         let headers = [("User-Agent", "SmokeAWSCredentials"),
                        ("Content-Length", "0"),
                        ("Host", endpointHostName),
@@ -188,7 +193,7 @@ final class BasicChannelInboundHandler: ChannelInboundHandler {
         httpRequestHead.headers = HTTPHeaders(headers)
         
         // Send the request on the channel.
-        ctx.write(self.wrapOutboundOut(.head(httpRequestHead)), promise: nil)
-        ctx.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
+        context.write(self.wrapOutboundOut(.head(httpRequestHead)), promise: nil)
+        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
     }
 }

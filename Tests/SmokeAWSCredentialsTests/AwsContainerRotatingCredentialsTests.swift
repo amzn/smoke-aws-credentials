@@ -17,6 +17,8 @@
 
 import XCTest
 @testable import SmokeAWSCredentials
+import SmokeAWSHttp
+import SmokeAWSCore
 
 private let data1 = try! jsonEncoder.encode(expiringCredentials)
 private let data2 = try! jsonEncoder.encode(invalidCredentials1)
@@ -84,8 +86,10 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
         }
         
         let environment = ["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "endpoint"]
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(fromEnvironment: environment,
-                                                                                 dataRetrieverProvider: dataRetrieverProvider)!
+        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
+            fromEnvironment: environment,
+            reporting: MockInvocationReporting(),
+            dataRetrieverProvider: dataRetrieverProvider)!
         let credentials = credentialsProvider.credentials
         
         XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
@@ -97,8 +101,10 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
         let environment = ["AWS_ACCESS_KEY_ID": TestVariables.accessKeyId,
                            "AWS_SECRET_ACCESS_KEY": TestVariables.secretAccessKey,
                            "AWS_SESSION_TOKEN": TestVariables.sessionToken]
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(fromEnvironment: environment,
-                                                                                 dataRetrieverProvider: dataRetrieverProvider1)!
+        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
+            fromEnvironment: environment,
+            reporting: MockInvocationReporting(),
+            dataRetrieverProvider: dataRetrieverProvider1)!
         let credentials = credentialsProvider.credentials
         
         XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
@@ -107,8 +113,10 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
     }
  
     func testNoCredentials() {
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(fromEnvironment: [:],
-                                                                                 dataRetrieverProvider: dataRetrieverProvider1)
+        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
+            fromEnvironment: [:],
+            reporting: MockInvocationReporting(),
+            dataRetrieverProvider: dataRetrieverProvider1)
         
         XCTAssertNil(credentialsProvider)
     }

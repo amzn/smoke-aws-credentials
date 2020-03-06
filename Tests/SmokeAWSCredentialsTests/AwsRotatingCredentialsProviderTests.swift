@@ -5,6 +5,7 @@
 
 import XCTest
 @testable import SmokeAWSCredentials
+import SmokeAWSCore
 
 struct AlwaysValidRetriever: ExpiringCredentialsRetriever {
     func close() {
@@ -75,7 +76,8 @@ class AwsRotatingCredentialsProviderTests: XCTestCase {
             let beforeExpiration = Date(timeIntervalSinceNow: 60)
             
             provider.scheduleUpdateCredentials(beforeExpiration: beforeExpiration,
-                                               roleSessionName: "roleSessionName")
+                                               roleSessionName: "roleSessionName",
+                                               reporting: MockInvocationReporting())
             // make sure we schedule the credentials once per invocation
             scheduler.doWork = true
         }
@@ -94,7 +96,8 @@ class AwsRotatingCredentialsProviderTests: XCTestCase {
             let beforeExpiration = Date(timeIntervalSinceNow: 60)
             
             provider.scheduleUpdateCredentials(beforeExpiration: beforeExpiration,
-                                               roleSessionName: "roleSessionName")
+                                               roleSessionName: "roleSessionName",
+                                               reporting: MockInvocationReporting())
             // make sure we schedule the credentials once per invocation
             scheduler.doWork = true
         }

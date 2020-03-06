@@ -1,4 +1,4 @@
-// swift-tools-version:4.1
+// swift-tools-version:5.0
 //
 // Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
@@ -17,22 +17,26 @@ import PackageDescription
 
 let package = Package(
     name: "SmokeAWSCredentials",
+    platforms: [
+        .macOS(.v10_12), .iOS(.v10)
+        ],
     products: [
         .library(
             name: "SmokeAWSCredentials",
             targets: ["SmokeAWSCredentials"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/amzn/smoke-aws.git", .upToNextMajor(from: "1.0.0")),
-        .package(url: "https://github.com/IBM-Swift/LoggerAPI.git", .upToNextMajor(from: "1.0.0")),
-        .package(url: "https://github.com/apple/swift-nio.git", from: "1.0.0"),
+        .package(url: "https://github.com/amzn/smoke-aws.git", from: "2.0.0-alpha"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
         .target(
             name: "SmokeAWSCredentials",
-            dependencies: ["SecurityTokenClient", "NIO", "NIOHTTP1", "NIOFoundationCompat", "LoggerAPI"]),
+            dependencies: ["SecurityTokenClient", "NIO", "NIOHTTP1", "NIOFoundationCompat", "Logging"]),
         .testTarget(
             name: "SmokeAWSCredentialsTests",
             dependencies: ["SmokeAWSCredentials"]),
-    ]
+    ],
+    swiftLanguageVersions: [.v5]
 )
