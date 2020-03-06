@@ -17,7 +17,7 @@
 
 import Foundation
 import SmokeAWSCore
-import LoggerAPI
+import Logging
 
 #if os(Linux)
 	import Glibc
@@ -132,7 +132,9 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     /**
      Schedules credentials rotation to begin.
      */
-    public func start(roleSessionName: String?) {
+    public func start<InvocationReportingType: SmokeAWSInvocationReporting>(
+            roleSessionName: String?,
+            reporting: InvocationReportingType) {
         guard case .initialized = status else {
             // if this instance isn't in the initialized state, do nothing
             return
@@ -142,7 +144,8 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         // initial ones expire
         if let expiration = expiringCredentials.expiration {
             scheduleUpdateCredentials(beforeExpiration: expiration,
-                                      roleSessionName: roleSessionName)
+                                      roleSessionName: roleSessionName,
+                                      reporting: reporting)
         }
     }
     
@@ -205,8 +208,10 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         return true
     }
     
-    internal func scheduleUpdateCredentials(beforeExpiration expiration: Date,
-                                            roleSessionName: String?) {
+    internal func scheduleUpdateCredentials<InvocationReportingType: SmokeAWSInvocationReporting>(
+            beforeExpiration expiration: Date,
+            roleSessionName: String?,
+            reporting: InvocationReportingType) {
         // create a deadline 5 minutes before the expiration
         let timeInterval = (expiration - expirationBufferSeconds).timeIntervalSinceNow
         let timeInternalInMinutes = timeInterval / 60
@@ -229,7 +234,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
                 return
             }
             
-            Log.verbose("\(logEntryPrefix) about to expire; rotating.")
+            reporting.logger.debug("\(logEntryPrefix) about to expire; rotating.")
             
             let expiration: Date?
             do {
@@ -251,16 +256,16 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
                     // expirary buffer) to get new credentials
                     retryDuration = self.validCredentialsRetrySeconds
                     
-                    Log.warning("\(logPrefix) Credentials still valid. "
-                        + "Attempting credentials refresh in 1 minute.")
+                    reporting.logger.warning(
+                        "\(logPrefix) Credentials still valid. Attempting credentials refresh in 1 minute.")
                 } else {
                     // at this point, we have tried multiple times to get new credentials
                     // something is quite wrong; try again in the future but at
                     // a reduced frequency
                     retryDuration = self.invalidCredentialsRetrySeconds
                     
-                    Log.error("\(logPrefix) Credentials no longer valid. "
-                        + "Attempting credentials refresh in 1 hour.")
+                    reporting.logger.error(
+                        "\(logPrefix) Credentials no longer valid. Attempting credentials refresh in 1 hour.")
                 }
                 
                 expiration = Date(timeIntervalSinceNow: retryDuration)
@@ -269,11 +274,13 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
             // if there is an expiry, schedule a rotation
             if let expiration = expiration {
                 self.scheduleUpdateCredentials(beforeExpiration: expiration,
-                                               roleSessionName: roleSessionName)
+                                               roleSessionName: roleSessionName,
+                                               reporting: reporting)
             }
         }
         
-        Log.info("\(logEntryPrefix) updated; rotation scheduled in \(hours) hours, \(minutes) minutes.")
+        reporting.logger.info(
+            "\(logEntryPrefix) updated; rotation scheduled in \(hours) hours, \(minutes) minutes.")
         scheduler.asyncAfter(deadline: deadline, qos: .unspecified,
                              flags: [], execute: newWorker)
         

@@ -19,7 +19,7 @@ import Foundation
 import SmokeAWSCore
 import SecurityTokenClient
 import SmokeHTTPClient
-import LoggerAPI
+import Logging
 
 public extension SmokeAWSCore.CredentialsProvider {
     
@@ -32,14 +32,16 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
-    func getAssumedStaticCredentials(
+    func getAssumedStaticCredentials<InvocationReportingType: SmokeAWSInvocationReporting>(
             roleArn: String,
             roleSessionName: String,
+            reporting: InvocationReportingType,
             retryConfiguration: HTTPClientRetryConfiguration = .default) -> StaticCredentials? {
-        return AWSSecurityTokenClient.getAssumedStaticCredentials(
+        return AWSSecurityTokenClient<InvocationReportingType>.getAssumedStaticCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             credentialsProvider: self,
+            reporting: reporting,
             retryConfiguration: retryConfiguration)
     }
     
@@ -55,17 +57,19 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
-    func getAssumedRotatingCredentials(
+    func getAssumedRotatingCredentials<InvocationReportingType: SmokeAWSInvocationReporting>(
         roleArn: String,
         roleSessionName: String,
         durationSeconds: Int?,
+        reporting: InvocationReportingType,
         retryConfiguration: HTTPClientRetryConfiguration = .default,
         eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads) -> StoppableCredentialsProvider? {
-        return AWSSecurityTokenClient.getAssumedRotatingCredentials(
+        return AWSSecurityTokenClient<InvocationReportingType>.getAssumedRotatingCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             credentialsProvider: self,
             durationSeconds: durationSeconds,
+            reporting: reporting,
             retryConfiguration: retryConfiguration,
             eventLoopProvider: eventLoopProvider)
     }

@@ -17,7 +17,7 @@
 
 import Foundation
 import SmokeAWSCore
-import LoggerAPI
+import Logging
 import SmokeHTTPClient
 
 public typealias AwsContainerRotatingCredentialsProvider = AwsRotatingCredentialsProvider
@@ -51,14 +51,17 @@ public extension AwsContainerRotatingCredentialsProvider {
      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI key or if that key isn't present,
      static credentials under the AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID keys.
      */
-    static func get(fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
-                           eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads)
+    static func get<InvocationReportingType: SmokeAWSInvocationReporting>(
+            fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
+            reporting: InvocationReportingType,
+            eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads)
         -> StoppableCredentialsProvider? {
             let dataRetrieverProvider: (String) -> () throws -> Data = { credentialsPath in
                 return {
                     guard let response = try BasicChannelInboundHandler.call(
                         endpointHostName: credentialsHost,
                         endpointPath: credentialsPath,
+                        reporting: reporting,
                         eventLoopProvider: eventLoopProvider,
                         endpointPort: credentialsPort) else {
                             let reason = "Unable to retrieve credentials: No credentials returned from endpoint"
@@ -71,18 +74,22 @@ public extension AwsContainerRotatingCredentialsProvider {
             }
             
             return get(fromEnvironment: environment,
+                       reporting: reporting,
                        dataRetrieverProvider: dataRetrieverProvider)
     }
     
     /**
      Internal static function for testing.
      */
-    static func get(fromEnvironment environment: [String: String],
-                    dataRetrieverProvider: (String) -> () throws -> Data)
+    static func get<InvocationReportingType: SmokeAWSInvocationReporting>(
+            fromEnvironment environment: [String: String],
+            reporting: InvocationReportingType,
+            dataRetrieverProvider: (String) -> () throws -> Data)
         -> StoppableCredentialsProvider? {
             var credentialsProvider: StoppableCredentialsProvider?
             if let rotatingCredentials = getRotatingCredentialsProvider(
                 fromEnvironment: environment,
+                reporting: reporting,
                 dataRetrieverProvider: dataRetrieverProvider) {
                     credentialsProvider = rotatingCredentials
             }
@@ -90,13 +97,16 @@ public extension AwsContainerRotatingCredentialsProvider {
             if credentialsProvider == nil,
                 let staticCredentials = getStaticCredentialsProvider(
                     fromEnvironment: environment,
+                    reporting: reporting,
                     dataRetrieverProvider: dataRetrieverProvider) {
                         credentialsProvider = staticCredentials
             }
             
             #if DEBUG
             if credentialsProvider == nil,
-                let rotatingCredentials = getDevRotatingCredentialsProvider(fromEnvironment: environment) {
+                let rotatingCredentials = getDevRotatingCredentialsProvider(
+                    fromEnvironment: environment,
+                    reporting: reporting) {
                     credentialsProvider = rotatingCredentials
             }
             #endif
@@ -104,8 +114,9 @@ public extension AwsContainerRotatingCredentialsProvider {
             return credentialsProvider
     }
     
-    private static func getStaticCredentialsProvider(
+    private static func getStaticCredentialsProvider<InvocationReportingType: SmokeAWSInvocationReporting>(
         fromEnvironment environment: [String: String],
+        reporting: InvocationReportingType,
         dataRetrieverProvider: (String) -> () throws -> Data)
         -> StoppableCredentialsProvider? {
             // get the values of the environment variables
@@ -114,13 +125,14 @@ public extension AwsContainerRotatingCredentialsProvider {
             let sessionToken = environment["AWS_SESSION_TOKEN"]
             
             guard let secretAccessKey = awsSecretAccessKey, let accessKeyId = awsAccessKeyId else {
-                Log.info("'AWS_ACCESS_KEY_ID' and 'AWS_SESSION_TOKEN' environment variables not specified."
-                    + " Static credentials not available.")
+                let logMessage = "'AWS_ACCESS_KEY_ID' and 'AWS_SESSION_TOKEN' environment variables not"
+                    + "specified. Static credentials not available."
+                reporting.logger.info("\(logMessage)")
                 
                 return nil
             }
             
-            Log.verbose("Static credentials retrieved from environment.")
+            reporting.logger.debug("Static credentials retrieved from environment.")
             
             // return these credentials
             return SmokeAWSCore.StaticCredentials(accessKeyId: accessKeyId,
@@ -129,13 +141,17 @@ public extension AwsContainerRotatingCredentialsProvider {
     }
     
 #if DEBUG
-    private static func getDevRotatingCredentialsProvider(fromEnvironment environment: [String: String]) -> StoppableCredentialsProvider? {
+    private static func getDevRotatingCredentialsProvider<InvocationReportingType: SmokeAWSInvocationReporting>(
+            fromEnvironment environment: [String: String],
+            reporting: InvocationReportingType) -> StoppableCredentialsProvider? {
         // get the values of the environment variables
         let devCredentialsIamRoleArn = environment["DEV_CREDENTIALS_IAM_ROLE_ARN"]
         
         guard let iamRoleArn = devCredentialsIamRoleArn else {
-            Log.info("'DEV_CREDENTIALS_IAM_ROLE_ARN' environment variable not specified."
-                + " Dev rotating credentials not available.")
+            let logMessage = "'DEV_CREDENTIALS_IAM_ROLE_ARN' environment variable not specified."
+                + " Dev rotating credentials not available."
+            
+            reporting.logger.info("\(logMessage)")
             
             return nil
         }
@@ -167,9 +183,10 @@ public extension AwsContainerRotatingCredentialsProvider {
         
         let rotatingCredentialsProvider: StoppableCredentialsProvider
         do {
-            rotatingCredentialsProvider = try createRotatingCredentialsProvider(dataRetriever: dataRetriever)
+            rotatingCredentialsProvider = try createRotatingCredentialsProvider(
+                reporting: reporting, dataRetriever: dataRetriever)
         } catch {
-            Log.error("Retrieving dev rotating credentials rotation failed: '\(error)'")
+            reporting.logger.error("Retrieving dev rotating credentials rotation failed: '\(error)'")
             
             return nil
         }
@@ -178,16 +195,19 @@ public extension AwsContainerRotatingCredentialsProvider {
     }
 #endif
     
-    private static func getRotatingCredentialsProvider(
+    private static func getRotatingCredentialsProvider<InvocationReportingType: SmokeAWSInvocationReporting>(
         fromEnvironment environment: [String: String],
+        reporting: InvocationReportingType,
         dataRetrieverProvider: (String) -> () throws -> Data)
         -> StoppableCredentialsProvider? {
         // get the values of the environment variables
         let awsContainerCredentialsRelativeUri = environment["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"]
         
         guard let credentialsPath = awsContainerCredentialsRelativeUri else {
-            Log.info("'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI' environment variable not specified."
-                + " Rotating credentials not available.")
+            let logMessage = "'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI' environment variable not specified."
+                + " Rotating credentials not available."
+            
+            reporting.logger.info("\(logMessage)")
             
             return nil
         }
@@ -196,9 +216,10 @@ public extension AwsContainerRotatingCredentialsProvider {
         let rotatingCredentialsProvider: StoppableCredentialsProvider
         do {
             rotatingCredentialsProvider = try createRotatingCredentialsProvider(
+                reporting: reporting,
                 dataRetriever: dataRetriever)
         } catch {
-            Log.error("Retrieving rotating credentials rotation failed: '\(error)'")
+            reporting.logger.error("Retrieving rotating credentials rotation failed: '\(error)'")
             
             return nil
         }
@@ -206,7 +227,8 @@ public extension AwsContainerRotatingCredentialsProvider {
         return rotatingCredentialsProvider
     }
     
-    private static func createRotatingCredentialsProvider(
+    private static func createRotatingCredentialsProvider<InvocationReportingType: SmokeAWSInvocationReporting>(
+        reporting: InvocationReportingType,
         dataRetriever: @escaping () throws -> Data) throws
         -> StoppableCredentialsProvider {
         let credentialsRetriever = FromDataExpiringCredentialsRetriever(
@@ -217,9 +239,10 @@ public extension AwsContainerRotatingCredentialsProvider {
                 expiringCredentialsRetriever: credentialsRetriever)
         
         awsContainerRotatingCredentialsProvider.start(
-            roleSessionName: nil)
+            roleSessionName: nil,
+            reporting: reporting)
         
-        Log.verbose("Rotating credentials retrieved from environment.")
+        reporting.logger.debug("Rotating credentials retrieved from environment.")
         
         // return the credentials
         return awsContainerRotatingCredentialsProvider
