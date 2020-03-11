@@ -51,7 +51,7 @@ public extension AwsContainerRotatingCredentialsProvider {
      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI key or if that key isn't present,
      static credentials under the AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID keys.
      */
-    static func get<InvocationReportingType: SmokeAWSInvocationReporting>(
+    static func get<InvocationReportingType: HTTPClientCoreInvocationReporting>(
             fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
             reporting: InvocationReportingType,
             eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads)
@@ -81,7 +81,7 @@ public extension AwsContainerRotatingCredentialsProvider {
     /**
      Internal static function for testing.
      */
-    static func get<InvocationReportingType: SmokeAWSInvocationReporting>(
+    static func get<InvocationReportingType: HTTPClientCoreInvocationReporting>(
             fromEnvironment environment: [String: String],
             reporting: InvocationReportingType,
             dataRetrieverProvider: (String) -> () throws -> Data)
@@ -114,7 +114,7 @@ public extension AwsContainerRotatingCredentialsProvider {
             return credentialsProvider
     }
     
-    private static func getStaticCredentialsProvider<InvocationReportingType: SmokeAWSInvocationReporting>(
+    private static func getStaticCredentialsProvider<InvocationReportingType: HTTPClientCoreInvocationReporting>(
         fromEnvironment environment: [String: String],
         reporting: InvocationReportingType,
         dataRetrieverProvider: (String) -> () throws -> Data)
@@ -141,7 +141,7 @@ public extension AwsContainerRotatingCredentialsProvider {
     }
     
 #if DEBUG
-    private static func getDevRotatingCredentialsProvider<InvocationReportingType: SmokeAWSInvocationReporting>(
+    private static func getDevRotatingCredentialsProvider<InvocationReportingType: HTTPClientCoreInvocationReporting>(
             fromEnvironment environment: [String: String],
             reporting: InvocationReportingType) -> StoppableCredentialsProvider? {
         // get the values of the environment variables
@@ -195,7 +195,7 @@ public extension AwsContainerRotatingCredentialsProvider {
     }
 #endif
     
-    private static func getRotatingCredentialsProvider<InvocationReportingType: SmokeAWSInvocationReporting>(
+    private static func getRotatingCredentialsProvider<InvocationReportingType: HTTPClientCoreInvocationReporting>(
         fromEnvironment environment: [String: String],
         reporting: InvocationReportingType,
         dataRetrieverProvider: (String) -> () throws -> Data)
@@ -227,7 +227,7 @@ public extension AwsContainerRotatingCredentialsProvider {
         return rotatingCredentialsProvider
     }
     
-    private static func createRotatingCredentialsProvider<InvocationReportingType: SmokeAWSInvocationReporting>(
+    private static func createRotatingCredentialsProvider<InvocationReportingType: HTTPClientCoreInvocationReporting>(
         reporting: InvocationReportingType,
         dataRetriever: @escaping () throws -> Data) throws
         -> StoppableCredentialsProvider {

@@ -33,7 +33,7 @@ enum BasicHttpChannelError: Error {
  A basic ChannelInboundHandler for contacting an endpoint and
  returning the response as a Data instance.
  */
-final class BasicChannelInboundHandler<InvocationReportingType: SmokeAWSInvocationReporting>: ChannelInboundHandler {
+final class BasicChannelInboundHandler<InvocationReportingType: HTTPClientCoreInvocationReporting>: ChannelInboundHandler {
     public typealias InboundIn = HTTPClientResponsePart
     public typealias OutboundOut = HTTPClientRequestPart
     
