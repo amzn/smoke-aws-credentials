@@ -32,7 +32,7 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
-    func getAssumedStaticCredentials<InvocationReportingType: SmokeAWSInvocationReporting>(
+    func getAssumedStaticCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
             roleArn: String,
             roleSessionName: String,
             reporting: InvocationReportingType,
@@ -57,7 +57,7 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
-    func getAssumedRotatingCredentials<InvocationReportingType: SmokeAWSInvocationReporting>(
+    func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
         roleArn: String,
         roleSessionName: String,
         durationSeconds: Int?,

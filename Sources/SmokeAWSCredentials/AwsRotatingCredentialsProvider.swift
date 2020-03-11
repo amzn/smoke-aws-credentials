@@ -16,6 +16,7 @@
 //
 
 import Foundation
+import SmokeHTTPClient
 import SmokeAWSCore
 import Logging
 
@@ -132,7 +133,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     /**
      Schedules credentials rotation to begin.
      */
-    public func start<InvocationReportingType: SmokeAWSInvocationReporting>(
+    public func start<InvocationReportingType: HTTPClientCoreInvocationReporting>(
             roleSessionName: String?,
             reporting: InvocationReportingType) {
         guard case .initialized = status else {
@@ -208,7 +209,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         return true
     }
     
-    internal func scheduleUpdateCredentials<InvocationReportingType: SmokeAWSInvocationReporting>(
+    internal func scheduleUpdateCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
             beforeExpiration expiration: Date,
             roleSessionName: String?,
             reporting: InvocationReportingType) {

@@ -17,8 +17,7 @@
 
 import XCTest
 @testable import SmokeAWSCredentials
-import SmokeAWSHttp
-import SmokeAWSCore
+import SmokeHTTPClient
 
 private let data1 = try! jsonEncoder.encode(expiringCredentials)
 private let data2 = try! jsonEncoder.encode(invalidCredentials1)
@@ -88,7 +87,7 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
         let environment = ["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "endpoint"]
         let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
             fromEnvironment: environment,
-            reporting: MockInvocationReporting(),
+            reporting: MockCoreInvocationReporting(),
             dataRetrieverProvider: dataRetrieverProvider)!
         let credentials = credentialsProvider.credentials
         
@@ -103,7 +102,7 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
                            "AWS_SESSION_TOKEN": TestVariables.sessionToken]
         let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
             fromEnvironment: environment,
-            reporting: MockInvocationReporting(),
+            reporting: MockCoreInvocationReporting(),
             dataRetrieverProvider: dataRetrieverProvider1)!
         let credentials = credentialsProvider.credentials
         
@@ -115,7 +114,7 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
     func testNoCredentials() {
         let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
             fromEnvironment: [:],
-            reporting: MockInvocationReporting(),
+            reporting: MockCoreInvocationReporting(),
             dataRetrieverProvider: dataRetrieverProvider1)
         
         XCTAssertNil(credentialsProvider)
