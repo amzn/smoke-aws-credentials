@@ -20,6 +20,18 @@ import SmokeAWSCore
 import Logging
 import SmokeHTTPClient
 
+internal struct CredentialsInvocationReporting<TraceContextType: InvocationTraceContext>: HTTPClientCoreInvocationReporting {
+    public let logger: Logger
+    public var internalRequestId: String
+    public var traceContext: TraceContextType
+    
+    public init(logger: Logger, internalRequestId: String, traceContext: TraceContextType) {
+        self.logger = logger
+        self.internalRequestId = internalRequestId
+        self.traceContext = traceContext
+    }
+}
+
 public typealias AwsContainerRotatingCredentialsProvider = AwsRotatingCredentialsProvider
 
 public extension AwsContainerRotatingCredentialsProvider {
@@ -51,11 +63,18 @@ public extension AwsContainerRotatingCredentialsProvider {
      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI key or if that key isn't present,
      static credentials under the AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID keys.
      */
-    static func get<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+    static func get<TraceContextType: InvocationTraceContext>(
             fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
-            reporting: InvocationReportingType,
+            logger: Logging.Logger,
+            traceContext: TraceContextType,
             eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads)
         -> StoppableCredentialsProvider? {
+            var credentialsLogger = logger
+            credentialsLogger[metadataKey: "credentials.source"] = "environment"
+            let reporting = CredentialsInvocationReporting(logger: logger,
+                                                           internalRequestId: "credentials.environment",
+                                                           traceContext: traceContext)
+            
             let dataRetrieverProvider: (String) -> () throws -> Data = { credentialsPath in
                 return {
                     guard let response = try BasicChannelInboundHandler.call(
@@ -81,7 +100,7 @@ public extension AwsContainerRotatingCredentialsProvider {
     /**
      Internal static function for testing.
      */
-    static func get<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+    internal static func get<InvocationReportingType: HTTPClientCoreInvocationReporting>(
             fromEnvironment environment: [String: String],
             reporting: InvocationReportingType,
             dataRetrieverProvider: (String) -> () throws -> Data)

@@ -57,14 +57,21 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
-    func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+    func getAssumedRotatingCredentials<TraceContextType: InvocationTraceContext>(
         roleArn: String,
         roleSessionName: String,
         durationSeconds: Int?,
-        reporting: InvocationReportingType,
+        logger: Logging.Logger,
+        traceContext: TraceContextType,
         retryConfiguration: HTTPClientRetryConfiguration = .default,
         eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads) -> StoppableCredentialsProvider? {
-        return AWSSecurityTokenClient<InvocationReportingType>.getAssumedRotatingCredentials(
+        var credentialsLogger = logger
+        credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
+        let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
+                                                       internalRequestId: "credentials.assumed.\(roleSessionName)",
+                                                       traceContext: traceContext)
+        
+        return AWSSecurityTokenClient<CredentialsInvocationReporting<TraceContextType>>.getAssumedRotatingCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             credentialsProvider: self,
