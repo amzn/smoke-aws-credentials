@@ -43,13 +43,7 @@ public protocol ExpiringCredentialsRetriever {
      Gracefully shuts down this retriever. This function is idempotent and
      will handle being called multiple times.
      */
-    func close()
-
-    /**
-     Waits for the retriever to be closed. If close() is not called,
-     this will block forever.
-     */
-    func wait()
+    func close() throws
     
     /**
      Retrieves a new instance of `ExpiringCredentials`.
@@ -126,7 +120,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     }
     
     deinit {
-        stop()
+        try? stop()
         wait()
     }
     
@@ -153,7 +147,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     /**
      Gracefully shuts down credentials rotation, letting any ongoing work complete..
      */
-    public func stop() {
+    public func stop() throws {
         pthread_mutex_lock(&statusMutex)
         defer { pthread_mutex_unlock(&statusMutex) }
         
@@ -162,7 +156,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         case .initialized:
             // no worker ever started, can just go straight to stopped
             status = .stopped
-            expiringCredentialsRetriever.close()
+            try expiringCredentialsRetriever.close()
             completedSemaphore.signal()
         case .running:
             status = .shuttingDown
@@ -201,7 +195,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         
         guard case .running = status else {
             status = .stopped
-            expiringCredentialsRetriever.close()
+            try? expiringCredentialsRetriever.close()
             completedSemaphore.signal()
             return false
         }

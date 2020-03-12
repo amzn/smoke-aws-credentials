@@ -20,6 +20,7 @@ import SecurityTokenClient
 import SecurityTokenModel
 import SmokeAWSCore
 import SmokeHTTPClient
+import AsyncHTTPClient
 import Logging
 
 enum AssumingRoleError: Error {
@@ -38,7 +39,7 @@ internal struct AWSSTSExpiringCredentialsRetriever<InvocationReportingType: HTTP
          roleSessionName: String,
          durationSeconds: Int?,
          retryConfiguration: HTTPClientRetryConfiguration,
-         eventLoopProvider: HTTPClient.EventLoopProvider,
+         eventLoopProvider: HTTPClient.EventLoopGroupProvider,
          reporting: InvocationReportingType) {
         self.client = AWSSecurityTokenClient(
             credentialsProvider: credentialsProvider,
@@ -50,12 +51,8 @@ internal struct AWSSTSExpiringCredentialsRetriever<InvocationReportingType: HTTP
         self.durationSeconds = durationSeconds
     }
     
-    func close() {
-        client.close()
-    }
-    
-    func wait() {
-        client.wait()
+    func close() throws {
+        try client.close()
     }
     
     func get() throws -> ExpiringCredentials {
@@ -117,7 +114,7 @@ extension SecurityTokenClientProtocol {
             reporting: reporting,
             retryConfiguration: retryConfiguration)
         defer {
-            securityTokenClient.close()
+            try? securityTokenClient.close()
         }
         
         let delegatedCredentials: ExpiringCredentials
@@ -147,7 +144,7 @@ extension SecurityTokenClientProtocol {
         durationSeconds: Int?,
         reporting: InvocationReportingType,
         retryConfiguration: HTTPClientRetryConfiguration,
-        eventLoopProvider: HTTPClient.EventLoopProvider) -> StoppableCredentialsProvider? {
+        eventLoopProvider: HTTPClient.EventLoopGroupProvider) -> StoppableCredentialsProvider? {
         let credentialsRetriever = AWSSTSExpiringCredentialsRetriever(
             credentialsProvider: credentialsProvider,
             roleArn: roleArn,

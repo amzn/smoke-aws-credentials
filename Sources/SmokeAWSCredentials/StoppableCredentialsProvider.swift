@@ -28,13 +28,7 @@ public protocol StoppableCredentialsProvider: CredentialsProvider {
      Gracefully shuts down background management of these
      credentials. May block until ongoing work completes.
      */
-    func stop()
-    
-    /**
-     Waits for any background management of these
-     credentials to finish. If stop() is not called, this will block forever.
-     */
-    func wait()
+    func stop() throws
 }
 
 /**
@@ -42,11 +36,7 @@ public protocol StoppableCredentialsProvider: CredentialsProvider {
  StaticCredentials to be returned. Nothing actually needs to be stopped.
  */
 extension SmokeAWSCore.StaticCredentials: StoppableCredentialsProvider {
-    public func stop() {
-        // nothing to do
-    }
-    
-    public func wait() {
+    public func stop() throws {
         // nothing to do
     }
 }

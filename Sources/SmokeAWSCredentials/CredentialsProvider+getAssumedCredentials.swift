@@ -19,6 +19,7 @@ import Foundation
 import SmokeAWSCore
 import SecurityTokenClient
 import SmokeHTTPClient
+import AsyncHTTPClient
 import Logging
 
 public extension SmokeAWSCore.CredentialsProvider {
@@ -64,7 +65,7 @@ public extension SmokeAWSCore.CredentialsProvider {
         logger: Logging.Logger,
         traceContext: TraceContextType,
         retryConfiguration: HTTPClientRetryConfiguration = .default,
-        eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads) -> StoppableCredentialsProvider? {
+        eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew) -> StoppableCredentialsProvider? {
         var credentialsLogger = logger
         credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
         let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
