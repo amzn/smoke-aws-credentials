@@ -96,7 +96,11 @@ public extension AwsContainerRotatingCredentialsProvider {
                     
                     completedSemaphore.wait()
                     
-                    switch result {
+                    guard let theResult = result else {
+                        throw CredentialsHTTPError.noResponse
+                    }
+                    
+                    switch theResult {
                     case .success(let response):
                         // if the response status is ok
                         if case .ok = response.status {
@@ -119,9 +123,7 @@ public extension AwsContainerRotatingCredentialsProvider {
                         }
                         
                         throw CredentialsHTTPError.errorResponse(response.status.code, bodyAsString)
-                    case .none:
-                        throw CredentialsHTTPError.noResponse
-                    case .some(.failure(let error)):
+                    case .failure(let error):
                         throw error
                     }
                 }
