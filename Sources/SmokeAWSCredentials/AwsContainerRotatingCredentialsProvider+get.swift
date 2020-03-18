@@ -20,6 +20,7 @@ import SmokeAWSCore
 import Logging
 import SmokeHTTPClient
 import AsyncHTTPClient
+import NIOHTTP1
 
 internal struct CredentialsInvocationReporting<TraceContextType: InvocationTraceContext>: HTTPClientCoreInvocationReporting {
     public let logger: Logger
@@ -79,7 +80,7 @@ public extension AwsContainerRotatingCredentialsProvider {
         -> StoppableCredentialsProvider? {
             var credentialsLogger = logger
             credentialsLogger[metadataKey: "credentials.source"] = "environment"
-            let reporting = CredentialsInvocationReporting(logger: logger,
+            let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
                                                            internalRequestId: "credentials.environment",
                                                            traceContext: traceContext)
             
@@ -87,9 +88,19 @@ public extension AwsContainerRotatingCredentialsProvider {
                 return {
                     let completedSemaphore = DispatchSemaphore(value: 0)
                     var result: Result<HTTPClient.Response, Error>?
+                    let endpoint = "http://\(credentialsHost)/\(credentialsPath)"
+                    
+                    let headers = [("User-Agent", "SmokeAWSCredentials"),
+                        ("Content-Length", "0"),
+                        ("Host", credentialsHost),
+                        ("Accept", "*/*")]
+                    
+                    credentialsLogger.debug("Retreiving environment credentials from endpoint: \(endpoint)")
+                    
+                    let request = try HTTPClient.Request(url: endpoint, method: .GET, headers: HTTPHeaders(headers))
                     
                     let httpClient = HTTPClient(eventLoopGroupProvider: eventLoopProvider)
-                    httpClient.get(url: "https://\(credentialsHost)/\(credentialsPath)").whenComplete { returnedResult in
+                    httpClient.execute(request: request).whenComplete { returnedResult in
                         result = returnedResult
                         completedSemaphore.signal()
                     }
