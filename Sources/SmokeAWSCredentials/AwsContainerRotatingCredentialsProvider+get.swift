@@ -19,8 +19,28 @@ import Foundation
 import SmokeAWSCore
 import Logging
 import SmokeHTTPClient
+import AsyncHTTPClient
+
+internal struct CredentialsInvocationReporting<TraceContextType: InvocationTraceContext>: HTTPClientCoreInvocationReporting {
+    public let logger: Logger
+    public var internalRequestId: String
+    public var traceContext: TraceContextType
+    
+    public init(logger: Logger, internalRequestId: String, traceContext: TraceContextType) {
+        self.logger = logger
+        self.internalRequestId = internalRequestId
+        self.traceContext = traceContext
+    }
+}
 
 public typealias AwsContainerRotatingCredentialsProvider = AwsRotatingCredentialsProvider
+
+enum CredentialsHTTPError: Error {
+    case invalidEndpoint(String)
+    case badResponse(String)
+    case errorResponse(UInt, String?)
+    case noResponse
+}
 
 public extension AwsContainerRotatingCredentialsProvider {
     // the endpoint for obtaining credentials from the ECS container
@@ -51,25 +71,61 @@ public extension AwsContainerRotatingCredentialsProvider {
      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI key or if that key isn't present,
      static credentials under the AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID keys.
      */
-    static func get<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+    static func get<TraceContextType: InvocationTraceContext>(
             fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
-            reporting: InvocationReportingType,
-            eventLoopProvider: HTTPClient.EventLoopProvider = .spawnNewThreads)
+            logger: Logging.Logger,
+            traceContext: TraceContextType,
+            eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew)
         -> StoppableCredentialsProvider? {
+            var credentialsLogger = logger
+            credentialsLogger[metadataKey: "credentials.source"] = "environment"
+            let reporting = CredentialsInvocationReporting(logger: logger,
+                                                           internalRequestId: "credentials.environment",
+                                                           traceContext: traceContext)
+            
             let dataRetrieverProvider: (String) -> () throws -> Data = { credentialsPath in
                 return {
-                    guard let response = try BasicChannelInboundHandler.call(
-                        endpointHostName: credentialsHost,
-                        endpointPath: credentialsPath,
-                        reporting: reporting,
-                        eventLoopProvider: eventLoopProvider,
-                        endpointPort: credentialsPort) else {
-                            let reason = "Unable to retrieve credentials: No credentials returned from endpoint"
-                                + " '\(credentialsHost):\(credentialsPort)/\(credentialsPath)'."
-                            throw SmokeAWSCredentialsError.missingCredentials(reason: reason)
+                    let completedSemaphore = DispatchSemaphore(value: 0)
+                    var result: Result<HTTPClient.Response, Error>?
+                    
+                    let httpClient = HTTPClient(eventLoopGroupProvider: eventLoopProvider)
+                    httpClient.get(url: "https://\(credentialsHost)/\(credentialsPath)").whenComplete { returnedResult in
+                        result = returnedResult
+                        completedSemaphore.signal()
                     }
                     
-                    return response
+                    completedSemaphore.wait()
+                    
+                    guard let theResult = result else {
+                        throw CredentialsHTTPError.noResponse
+                    }
+                    
+                    switch theResult {
+                    case .success(let response):
+                        // if the response status is ok
+                        if case .ok = response.status {
+                            if var body = response.body {
+                                let byteBufferSize = body.readableBytes
+                                return body.readData(length: byteBufferSize) ?? Data()
+                            } else {
+                                return Data()
+                            }
+                        }
+                        
+                        let bodyAsString: String?
+                        if var body = response.body {
+                            let byteBufferSize = body.readableBytes
+                            let data = body.readData(length: byteBufferSize) ?? Data()
+                            
+                            bodyAsString = String(data: data, encoding: .utf8)
+                        } else {
+                            bodyAsString = nil
+                        }
+                        
+                        throw CredentialsHTTPError.errorResponse(response.status.code, bodyAsString)
+                    case .failure(let error):
+                        throw error
+                    }
                 }
             }
             
@@ -81,7 +137,7 @@ public extension AwsContainerRotatingCredentialsProvider {
     /**
      Internal static function for testing.
      */
-    static func get<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+    internal static func get<InvocationReportingType: HTTPClientCoreInvocationReporting>(
             fromEnvironment environment: [String: String],
             reporting: InvocationReportingType,
             dataRetrieverProvider: (String) -> () throws -> Data)
