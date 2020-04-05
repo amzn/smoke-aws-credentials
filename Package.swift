@@ -16,7 +16,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "SmokeAWSCredentials",
+    name: "smoke-aws-credentials",
     platforms: [
         .macOS(.v10_15), .iOS(.v10)
         ],
@@ -26,14 +26,14 @@ let package = Package(
             targets: ["SmokeAWSCredentials"]),
     ],
     dependencies: [
-        .package(name: "SmokeAWS", url: "https://github.com/amzn/smoke-aws.git", .branch("use_swift_crypto_under_5_2")),
+        .package(url: "https://github.com/amzn/smoke-aws.git", .branch("use_swift_crypto_under_5_2")),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
         .target(
             name: "SmokeAWSCredentials", dependencies: [
-                .product(name: "SecurityTokenClient", package: "SmokeAWS"),
+                .product(name: "SecurityTokenClient", package: "smoke-aws"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIO", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
