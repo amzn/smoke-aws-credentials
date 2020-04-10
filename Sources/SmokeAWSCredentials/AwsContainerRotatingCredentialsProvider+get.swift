@@ -17,6 +17,7 @@
 
 import Foundation
 import SmokeAWSCore
+import SmokeAWSHttp
 import Logging
 import SmokeHTTPClient
 import AsyncHTTPClient
@@ -65,6 +66,23 @@ public extension AwsContainerRotatingCredentialsProvider {
      being decoded into the ExpiringCredentials structure.
      */
     static let devIamRoleArnEnvironmentVariable = "DEV_CREDENTIALS_IAM_ROLE_ARN"
+    
+    /**
+     Static function that retrieves credentials provider from the specified environment -
+     either rotating credentials retrieved from an endpoint specified under the
+     AWS_CONTAINER_CREDENTIALS_RELATIVE_URI key or if that key isn't present,
+     static credentials under the AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID keys.
+     */
+    static func get(
+            fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
+            logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+            eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew)
+        -> StoppableCredentialsProvider? {
+            return get(fromEnvironment: environment,
+                       logger: logger,
+                       traceContext: AWSClientInvocationTraceContext(),
+                       eventLoopProvider: eventLoopProvider)
+    }
  
     /**
      Static function that retrieves credentials provider from the specified environment -
@@ -74,7 +92,7 @@ public extension AwsContainerRotatingCredentialsProvider {
      */
     static func get<TraceContextType: InvocationTraceContext>(
             fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
-            logger: Logging.Logger,
+            logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
             traceContext: TraceContextType,
             eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew)
         -> StoppableCredentialsProvider? {
