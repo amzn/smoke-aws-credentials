@@ -1,4 +1,4 @@
-// swift-tools-version:5.2
+// swift-tools-version:5.0
 //
 // Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
@@ -16,9 +16,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "smoke-aws-credentials",
+    name: "SmokeAWSCredentials",
     platforms: [
-        .macOS(.v10_15), .iOS(.v10)
+        .macOS(.v10_12), .iOS(.v10)
         ],
     products: [
         .library(
@@ -32,17 +32,11 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "SmokeAWSCredentials", dependencies: [
-                .product(name: "SecurityTokenClient", package: "smoke-aws"),
-                .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIO", package: "swift-nio"),
-                .product(name: "NIOHTTP1", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
-            ]),
+            name: "SmokeAWSCredentials",
+            dependencies: ["SecurityTokenClient", "NIO", "NIOHTTP1", "NIOFoundationCompat", "Logging"]),
         .testTarget(
-            name: "SmokeAWSCredentialsTests", dependencies: [
-                .target(name: "SmokeAWSCredentials"),
-            ]),
+            name: "SmokeAWSCredentialsTests",
+            dependencies: ["SmokeAWSCredentials"]),
     ],
     swiftLanguageVersions: [.v5]
 )
