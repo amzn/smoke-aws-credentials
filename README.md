@@ -40,7 +40,7 @@ For swift-tools version 5.2 and greater-
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "2.0.0"))
+    .package(url: "https://github.com/amzn/smoke-aws-credentials", from: "2.0.0")
 ]
 
 .target(
@@ -52,7 +52,7 @@ For swift-tools version 5.1 and prior-
  
 ```swift
 dependencies: [
-    .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "2.0.0"))
+    .package(url: "https://github.com/amzn/smoke-aws-credentials", from: "2.0.0")
 ]
 
 .target(name: ..., dependencies: [
