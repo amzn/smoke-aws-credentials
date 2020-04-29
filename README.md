@@ -58,7 +58,7 @@ dependencies: [
 .target(name: ..., dependencies: [
     ..., 
     .product(name: "SmokeAWSCredentials", package: "smoke-aws-credentials"),
-    ]),
+]),
 ```
 
 ## Step 2: Obtain a credentials provider from a container environment such as Elastic Container Service (ECS)
