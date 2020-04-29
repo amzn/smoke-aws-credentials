@@ -2,16 +2,17 @@
 <a href="https://travis-ci.com/amzn/smoke-aws-credentials">
 <img src="https://travis-ci.com/amzn/smoke-aws-credentials.svg?branch=master" alt="Build - Master Branch">
 </a>
-<img src="https://img.shields.io/badge/os-linux-green.svg?style=flat" alt="Linux">
 <a href="http://swift.org">
-<img src="https://img.shields.io/badge/swift-5.0-orange.svg?style=flat" alt="Swift 5.0 Compatible">
+<img src="https://img.shields.io/badge/swift-5.0-orange.svg?style=flat" alt="Swift 5.0 Tested">
 </a>
 <a href="http://swift.org">
-<img src="https://img.shields.io/badge/swift-5.1-orange.svg?style=flat" alt="Swift 5.1 Compatible">
+<img src="https://img.shields.io/badge/swift-5.1-orange.svg?style=flat" alt="Swift 5.1 Tested">
 </a>
 <a href="http://swift.org">
-<img src="https://img.shields.io/badge/swift-5.2-orange.svg?style=flat" alt="Swift 5.2 Compatible">
+<img src="https://img.shields.io/badge/swift-5.2-orange.svg?style=flat" alt="Swift 5.2 Tested">
 </a>
+<img src="https://img.shields.io/badge/ubuntu-16.04-yellow.svg?style=flat" alt="Ubuntu 16.04 Tested">
+<img src="https://img.shields.io/badge/ubuntu-18.04-yellow.svg?style=flat" alt="Ubuntu 18.04 Tested">
 <a href="https://gitter.im/SmokeServerSide">
 <img src="https://img.shields.io/badge/chat-on%20gitter-ee115e.svg?style=flat" alt="Join the Smoke Server Side community on gitter">
 </a>
@@ -35,14 +36,29 @@ This package provides two mechanisms for obtaining credentials-
 SmokeAWSCredentials uses the Swift Package Manager. To use the framework, add the following dependency
 to your Package.swift and depend on the `SmokeAWSCredentials` target from this package-
 
+For swift-tools version 5.2 and greater-
+
 ```swift
 dependencies: [
-    .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "1.0.0"))
+    .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "2.0.0"))
 ]
 
 .target(
     name: ...,
     dependencies: [..., "SmokeAWSCredentials"]),
+```
+
+For swift-tools version 5.1 and prior-
+ 
+```swift
+dependencies: [
+    .package(url: "https://github.com/amzn/smoke-aws-credentials", .upToNextMajor(from: "2.0.0"))
+]
+
+.target(name: ..., dependencies: [
+    ..., 
+    .product(name: "SmokeAWSCredentials", package: "smoke-aws-credentials"),
+]),
 ```
 
 ## Step 2: Obtain a credentials provider from a container environment such as Elastic Container Service (ECS)
