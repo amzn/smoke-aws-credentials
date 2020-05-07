@@ -43,10 +43,12 @@ dependencies: [
     .package(url: "https://github.com/amzn/smoke-aws-credentials", from: "2.0.0")
 ]
 
-.target(
-    name: ...,
-    dependencies: [..., "SmokeAWSCredentials"]),
+.target(name: ..., dependencies: [
+    ..., 
+    .product(name: "SmokeAWSCredentials", package: "smoke-aws-credentials"),
+]),
 ```
+
 
 For swift-tools version 5.1 and prior-
  
@@ -55,10 +57,9 @@ dependencies: [
     .package(url: "https://github.com/amzn/smoke-aws-credentials", from: "2.0.0")
 ]
 
-.target(name: ..., dependencies: [
-    ..., 
-    .product(name: "SmokeAWSCredentials", package: "smoke-aws-credentials"),
-]),
+.target(
+    name: ...,
+    dependencies: [..., "SmokeAWSCredentials"]),
 ```
 
 ## Step 2: Obtain a credentials provider from a container environment such as Elastic Container Service (ECS)
