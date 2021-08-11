@@ -160,6 +160,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
             completedSemaphore.signal()
         case .running:
             status = .shuttingDown
+            try expiringCredentialsRetriever.close()
         default:
             // nothing to do
             break
@@ -195,7 +196,6 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         
         guard case .running = status else {
             status = .stopped
-            try? expiringCredentialsRetriever.close()
             completedSemaphore.signal()
             return false
         }
