@@ -104,16 +104,23 @@ public extension AwsContainerRotatingCredentialsProvider {
             
             let dataRetrieverProvider: (String) -> () throws -> Data = { credentialsPath in
                 return {
+                    let infix: String
+                    if let credentialsPrefix = credentialsPath.first, credentialsPrefix != "/" {
+                        infix = "/"
+                    } else {
+                        infix = ""
+                    }
+                    
                     let completedSemaphore = DispatchSemaphore(value: 0)
                     var result: Result<HTTPClient.Response, Error>?
-                    let endpoint = "http://\(credentialsHost)/\(credentialsPath)"
+                    let endpoint = "http://\(credentialsHost)\(infix)\(credentialsPath)"
                     
                     let headers = [("User-Agent", "SmokeAWSCredentials"),
                         ("Content-Length", "0"),
                         ("Host", credentialsHost),
                         ("Accept", "*/*")]
                     
-                    credentialsLogger.debug("Retreiving environment credentials from endpoint: \(endpoint)")
+                    credentialsLogger.debug("Retrieving environment credentials from endpoint: \(endpoint)")
                     
                     let request = try HTTPClient.Request(url: endpoint, method: .GET, headers: HTTPHeaders(headers))
                     
@@ -121,6 +128,9 @@ public extension AwsContainerRotatingCredentialsProvider {
                     httpClient.execute(request: request).whenComplete { returnedResult in
                         result = returnedResult
                         completedSemaphore.signal()
+                    }
+                    defer {
+                        try? httpClient.syncShutdown()
                     }
                     
                     completedSemaphore.wait()
@@ -315,7 +325,7 @@ public extension AwsContainerRotatingCredentialsProvider {
     private static func createRotatingCredentialsProvider<InvocationReportingType: HTTPClientCoreInvocationReporting>(
         reporting: InvocationReportingType,
         dataRetriever: @escaping () throws -> Data) throws
-        -> StoppableCredentialsProvider {
+    -> StoppableCredentialsProvider {
         let credentialsRetriever = FromDataExpiringCredentialsRetriever(
             dataRetriever: dataRetriever)
             
