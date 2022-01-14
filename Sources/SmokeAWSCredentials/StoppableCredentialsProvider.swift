@@ -28,7 +28,27 @@ public protocol StoppableCredentialsProvider: CredentialsProvider {
      Gracefully shuts down background management of these
      credentials. May block until ongoing work completes.
      */
+    func syncShutdown() throws
+    
+    @available(*, deprecated, renamed: "syncShutdown")
     func stop() throws
+    
+#if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
+    func shutdown() async throws
+#endif
+}
+
+public extension StoppableCredentialsProvider {
+    @available(swift, deprecated: 3.0, message: "To avoid a breaking change, by default syncShutdown() delegates to the implementation of stop()")
+    func syncShutdown() throws {
+        try stop()
+    }
+    
+#if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
+    func shutdown() async throws {
+        fatalError("`shutdown() async throws` needs to be implemented on `StoppableCredentialsProvider` conforming type to allow for async shutdown.")
+    }
+#endif
 }
 
 /**
@@ -39,4 +59,10 @@ extension SmokeAWSCore.StaticCredentials: StoppableCredentialsProvider {
     public func stop() throws {
         // nothing to do
     }
+    
+#if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
+    public func shutdown() async throws {
+        // nothing to do
+    }
+#endif
 }

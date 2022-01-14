@@ -52,8 +52,14 @@ internal struct AWSSTSExpiringCredentialsRetriever<InvocationReportingType: HTTP
     }
     
     func close() throws {
-        try client.close()
+        try self.client.syncShutdown()
     }
+
+    #if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
+    func shutdown() async throws {
+        try await self.client.shutdown()
+    }
+    #endif
     
     func get() throws -> ExpiringCredentials {
         return try client.getAssumedExpiringCredentials(
@@ -114,7 +120,7 @@ extension SecurityTokenClientProtocol {
             reporting: reporting,
             retryConfiguration: retryConfiguration)
         defer {
-            try? securityTokenClient.close()
+            try? securityTokenClient.syncShutdown()
         }
         
         let delegatedCredentials: ExpiringCredentials
