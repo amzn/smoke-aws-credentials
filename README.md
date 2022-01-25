@@ -80,7 +80,13 @@ The credentials returned will be valid for at least *5 minutes* from the time th
 When you no longer need these credentials, you can stop the background credentials rotation.
 
 ```swift
-    credentialsProvider.stop()
+    try await credentialsProvider.shutdown()
+```
+
+OR
+
+```swift
+    try credentialsProvider.syncShutdown()
 ```
 
 ## Step 3: Assuming credentials using existing credentials

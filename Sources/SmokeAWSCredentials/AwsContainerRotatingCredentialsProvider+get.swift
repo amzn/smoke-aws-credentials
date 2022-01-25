@@ -350,6 +350,12 @@ public extension AwsContainerRotatingCredentialsProvider {
             // nothing to do
         }
         
+#if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
+        func shutdown() async throws {
+            // nothing to do
+        }
+#endif
+        
         func wait() {
             // nothing to do
         }

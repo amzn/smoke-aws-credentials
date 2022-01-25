@@ -41,14 +41,38 @@ public protocol ExpiringCredentialsRetriever {
     
     /**
      Gracefully shuts down this retriever. This function is idempotent and
-     will handle being called multiple times.
+     will handle being called multiple times. Will block until shutdown is complete.
      */
+    func syncShutdown() throws
+    
+    @available(*, deprecated, renamed: "syncShutdown")
     func close() throws
+
+    /**
+     Gracefully shuts down this retriever. This function is idempotent and
+     will handle being called multiple times. Will return when shutdown is complete.
+     */
+    #if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
+    func shutdown() async throws
+    #endif
     
     /**
      Retrieves a new instance of `ExpiringCredentials`.
      */
     func get() throws -> ExpiringCredentials
+}
+
+public extension ExpiringCredentialsRetriever {
+    @available(swift, deprecated: 3.0, message: "To avoid a breaking change, by default syncShutdown() delegates to the implementation of close()")
+    func syncShutdown() throws {
+        try close()
+    }
+    
+#if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
+    func shutdown() async throws {
+        fatalError("`shutdown() async throws` needs to be implemented on `ExpiringCredentialsRetriever` conforming type to allow for async shutdown.")
+    }
+#endif
 }
 
 /**
@@ -156,16 +180,38 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         case .initialized:
             // no worker ever started, can just go straight to stopped
             status = .stopped
-            try expiringCredentialsRetriever.close()
+            try expiringCredentialsRetriever.syncShutdown()
             completedSemaphore.signal()
         case .running:
             status = .shuttingDown
-            try expiringCredentialsRetriever.close()
+            try expiringCredentialsRetriever.syncShutdown()
         default:
             // nothing to do
             break
         }
     }
+    
+#if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
+    public func shutdown() async throws {
+        pthread_mutex_lock(&statusMutex)
+        defer { pthread_mutex_unlock(&statusMutex) }
+        
+        // if there is currently a worker to shutdown
+        switch status {
+        case .initialized:
+            // no worker ever started, can just go straight to stopped
+            status = .stopped
+            try await expiringCredentialsRetriever.shutdown()
+            completedSemaphore.signal()
+        case .running:
+            status = .shuttingDown
+            try await expiringCredentialsRetriever.shutdown()
+        default:
+            // nothing to do
+            break
+        }
+    }
+#endif
     
     private func verifyWorkerNotStopped() -> Bool {
         pthread_mutex_lock(&statusMutex)
