@@ -120,7 +120,7 @@ public extension AwsContainerRotatingCredentialsProvider {
                         ("Host", credentialsHost),
                         ("Accept", "*/*")]
                     
-                    credentialsLogger.debug("Retrieving environment credentials from endpoint: \(endpoint)")
+                    credentialsLogger.trace("Retrieving environment credentials from endpoint: \(endpoint)")
                     
                     let request = try HTTPClient.Request(url: endpoint, method: .GET, headers: HTTPHeaders(headers))
                     
@@ -222,12 +222,12 @@ public extension AwsContainerRotatingCredentialsProvider {
             guard let secretAccessKey = awsSecretAccessKey, let accessKeyId = awsAccessKeyId else {
                 let logMessage = "'AWS_ACCESS_KEY_ID' and 'AWS_SESSION_TOKEN' environment variables not"
                     + "specified. Static credentials not available."
-                reporting.logger.info("\(logMessage)")
+                reporting.logger.trace("\(logMessage)")
                 
                 return nil
             }
             
-            reporting.logger.debug("Static credentials retrieved from environment.")
+            reporting.logger.trace("Static credentials retrieved from environment.")
             
             // return these credentials
             return SmokeAWSCore.StaticCredentials(accessKeyId: accessKeyId,
@@ -246,7 +246,7 @@ public extension AwsContainerRotatingCredentialsProvider {
             let logMessage = "'DEV_CREDENTIALS_IAM_ROLE_ARN' environment variable not specified."
                 + " Dev rotating credentials not available."
             
-            reporting.logger.info("\(logMessage)")
+            reporting.logger.trace("\(logMessage)")
             
             return nil
         }
@@ -302,7 +302,7 @@ public extension AwsContainerRotatingCredentialsProvider {
             let logMessage = "'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI' environment variable not specified."
                 + " Rotating credentials not available."
             
-            reporting.logger.info("\(logMessage)")
+            reporting.logger.trace("\(logMessage)")
             
             return nil
         }
@@ -337,7 +337,7 @@ public extension AwsContainerRotatingCredentialsProvider {
             roleSessionName: nil,
             reporting: reporting)
         
-        reporting.logger.debug("Rotating credentials retrieved from environment.")
+        reporting.logger.trace("Rotating credentials retrieved from environment.")
         
         // return the credentials
         return awsContainerRotatingCredentialsProvider

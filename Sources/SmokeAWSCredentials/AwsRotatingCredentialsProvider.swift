@@ -275,7 +275,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
                 return
             }
             
-            reporting.logger.debug("\(logEntryPrefix) about to expire; rotating.")
+            reporting.logger.trace("\(logEntryPrefix) about to expire; rotating.")
             
             let expiration: Date?
             do {
@@ -320,7 +320,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
             }
         }
         
-        reporting.logger.info(
+        reporting.logger.trace(
             "\(logEntryPrefix) updated; rotation scheduled in \(hours) hours, \(minutes) minutes.")
         scheduler.asyncAfter(deadline: deadline, qos: .unspecified,
                              flags: [], execute: newWorker)
