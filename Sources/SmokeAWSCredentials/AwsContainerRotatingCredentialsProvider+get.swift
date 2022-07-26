@@ -18,12 +18,12 @@
 import Foundation
 import SmokeAWSCore
 import SmokeAWSHttp
-import Logging
+@preconcurrency import Logging
 import SmokeHTTPClient
 import AsyncHTTPClient
 import NIOHTTP1
 
-internal struct CredentialsInvocationReporting<TraceContextType: InvocationTraceContext>: HTTPClientCoreInvocationReporting {
+internal struct CredentialsInvocationReporting<TraceContextType: InvocationTraceContext & Sendable>: HTTPClientCoreInvocationReporting, Sendable {
     public let logger: Logger
     public var internalRequestId: String
     public var traceContext: TraceContextType
@@ -90,7 +90,7 @@ public extension AwsContainerRotatingCredentialsProvider {
      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI key or if that key isn't present,
      static credentials under the AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID keys.
      */
-    static func get<TraceContextType: InvocationTraceContext>(
+    static func get<TraceContextType: InvocationTraceContext & Sendable>(
             fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
             logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
             traceContext: TraceContextType,

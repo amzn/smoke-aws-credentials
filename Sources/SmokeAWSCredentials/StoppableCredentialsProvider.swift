@@ -23,7 +23,7 @@ import SmokeAWSCore
  functions to stop and wait on background management of these
  credentials.
  */
-public protocol StoppableCredentialsProvider: CredentialsProvider {
+public protocol StoppableCredentialsProvider: CredentialsProvider, Sendable {
     /**
      Gracefully shuts down background management of these
      credentials. May block until ongoing work completes.

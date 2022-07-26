@@ -78,7 +78,7 @@ public extension ExpiringCredentialsRetriever {
 /**
  Class that manages the rotating credentials.
  */
-public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
+public final class AwsRotatingCredentialsProvider: StoppableCredentialsProvider, @unchecked Sendable {
     public var credentials: Credentials {
         // the provider returns a copy of the current
         // credentials which is used within a request.

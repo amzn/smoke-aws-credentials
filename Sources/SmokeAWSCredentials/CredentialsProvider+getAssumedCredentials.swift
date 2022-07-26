@@ -58,7 +58,7 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
-    func getAssumedStaticCredentials<TraceContextType: InvocationTraceContext>(
+    func getAssumedStaticCredentials<TraceContextType: InvocationTraceContext & Sendable>(
             roleArn: String,
             roleSessionName: String,
             logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
@@ -124,7 +124,7 @@ public extension SmokeAWSCore.CredentialsProvider {
                               If not present, the default configuration will be used.
         - eventLoopProvider: the provider of the event loop for obtaining these credentials.
      */
-    func getAssumedRotatingCredentials<TraceContextType: InvocationTraceContext>(
+    func getAssumedRotatingCredentials<TraceContextType: InvocationTraceContext & Sendable>(
             roleArn: String,
             roleSessionName: String,
             durationSeconds: Int?,

@@ -3,29 +3,38 @@
     "pins": [
       {
         "package": "async-http-client",
-        "repositoryURL": "https://github.com/swift-server/async-http-client.git",
+        "repositoryURL": "https://github.com/tachyonics/async-http-client.git",
         "state": {
-          "branch": null,
-          "revision": "794dc9d42720af97cedd395e8cd2add9173ffd9a",
-          "version": "1.11.1"
+          "branch": "request_body_known_length",
+          "revision": "0e2272338465d56ac599c2519c3d6bf24234947f",
+          "version": null
+        }
+      },
+      {
+        "package": "async-http-middleware-client",
+        "repositoryURL": "https://github.com/tachyonics/async-http-middleware-client",
+        "state": {
+          "branch": "poc",
+          "revision": "e84e67c0a557408e3fd0c8bd258eb38ad9fd36ea",
+          "version": null
         }
       },
       {
         "package": "smoke-aws",
         "repositoryURL": "https://github.com/amzn/smoke-aws.git",
         "state": {
-          "branch": null,
-          "revision": "8669b7c5be5e45f6d8f1177ddc41c33d66eb71dc",
-          "version": "2.44.46"
+          "branch": "middleware_poc",
+          "revision": "08adf025acd7fe882d184749f7904d46e8524d6d",
+          "version": null
         }
       },
       {
         "package": "smoke-http",
         "repositoryURL": "https://github.com/amzn/smoke-http.git",
         "state": {
-          "branch": null,
-          "revision": "6e423be68a8415dc387ba9230ad2442c4fd3e5c1",
-          "version": "2.13.2"
+          "branch": "middleware_poc",
+          "revision": "9b8457e47fb9aab2f56f213e32d46fb92e7643e7",
+          "version": null
         }
       },
       {
@@ -35,6 +44,15 @@
           "branch": null,
           "revision": "ddb07e896a2a8af79512543b1c7eb9797f8898a5",
           "version": "1.1.7"
+        }
+      },
+      {
+        "package": "swift-http-client-middleware",
+        "repositoryURL": "https://github.com/tachyonics/swift-http-client-middleware",
+        "state": {
+          "branch": "poc",
+          "revision": "24a7b8c6e848fabe6fa6f0d85983e54099c1b2e3",
+          "version": null
         }
       },
       {

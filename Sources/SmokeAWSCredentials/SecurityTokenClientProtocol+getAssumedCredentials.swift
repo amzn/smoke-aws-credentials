@@ -28,7 +28,7 @@ enum AssumingRoleError: Error {
     case noCredentialsReturned(arn: String)
 }
 
-internal struct AWSSTSExpiringCredentialsRetriever<InvocationReportingType: HTTPClientCoreInvocationReporting>: ExpiringCredentialsRetriever {
+internal struct AWSSTSExpiringCredentialsRetriever<InvocationReportingType: HTTPClientCoreInvocationReporting & Sendable>: ExpiringCredentialsRetriever {
     let client: AWSSecurityTokenClient<InvocationReportingType>
     let roleArn: String
     let roleSessionName: String
@@ -109,7 +109,7 @@ extension SecurityTokenClientProtocol {
     /**
      Function that retrieves StaticCredentials from the provided token service.
      */
-    internal static func getAssumedStaticCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+    internal static func getAssumedStaticCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting & Sendable>(
         roleArn: String,
         roleSessionName: String,
         credentialsProvider: CredentialsProvider,
@@ -143,7 +143,7 @@ extension SecurityTokenClientProtocol {
     /**
      Function that retrieves AssumedRotatingCredentials from the provided token service.
      */
-    internal static func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+    internal static func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting & Sendable>(
         roleArn: String,
         roleSessionName: String,
         credentialsProvider: CredentialsProvider,

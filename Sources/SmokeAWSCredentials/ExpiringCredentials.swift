@@ -15,13 +15,13 @@
 //  SmokeAWSCredentials
 //
 
-import Foundation
+@preconcurrency import Foundation
 import SmokeAWSCore
 
 /**
  Structure that holds and is used to decode the response from AWS Metadata service.
  */
-public struct ExpiringCredentials: Codable, SmokeAWSCore.Credentials {
+public struct ExpiringCredentials: Codable, SmokeAWSCore.Credentials, Sendable {
     public let accessKeyId: String
     public let expiration: Date?
     public let secretAccessKey: String
