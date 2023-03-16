@@ -18,6 +18,8 @@
 import XCTest
 @testable import SmokeAWSCredentials
 import SmokeHTTPClient
+import AsyncHTTPClient
+import Logging
 
 private let data1 = try! jsonEncoder.encode(expiringCredentials)
 private let data2 = try! jsonEncoder.encode(invalidCredentials1)
@@ -35,6 +37,37 @@ private let dataRetriever3: () throws -> Data = {
 
 private let dataRetrieverProvider1: (String) -> () throws -> Data = { credentialsPath in
     return dataRetriever1
+}
+
+internal struct TestExpiringCredentialsRetriever: DevExpiringCredentialsRetrieverProtocol, ContainerExpiringCredentialsRetrieverProtocol {
+    init(iamRoleArn: String) {
+        // nothing to do
+    }
+    
+    init(eventLoopProvider: AsyncHTTPClient.HTTPClient.EventLoopGroupProvider, credentialsPath: String, logger: Logger) {
+        XCTAssertEqual(credentialsPath, "endpoint")
+    }
+    
+    
+    func shutdown() async throws {
+        // nothing to do
+    }
+    
+    func close() throws {
+        // nothing to do
+    }
+    
+    func get() throws -> ExpiringCredentials {
+        // don't provide an expiration to avoid setting up a rotation timer in the test
+        return ExpiringCredentials(accessKeyId: TestVariables.accessKeyId,
+                                   expiration: nil,
+                                   secretAccessKey: TestVariables.secretAccessKey,
+                                   sessionToken: TestVariables.sessionToken)
+    }
+    
+    func getCredentials() throws -> ExpiringCredentials {
+        return try get()
+    }
 }
 
 class AwsContainerRotatingCredentialsTests: XCTestCase {
@@ -71,24 +104,12 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
         }
     }
     
+    @available(swift, deprecated: 3.0, message: "Testing AwsContainerRotatingCredentialsProvider")
     func testGetAwsContainerCredentials() {
-        // don't provide an expiration to avoid setting up a rotation timer in the test
-        let nonExpiringCredentials = ExpiringCredentials(accessKeyId: TestVariables.accessKeyId,
-                                                         expiration: nil,
-                                                         secretAccessKey: TestVariables.secretAccessKey,
-                                                         sessionToken: TestVariables.sessionToken)
-        
-        let data = try! jsonEncoder.encode(nonExpiringCredentials)
-
-        let dataRetrieverProvider: (String) -> () throws -> Data = { credentialsPath in
-            return { return data }
-        }
-        
         let environment = ["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "endpoint"]
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
-            fromEnvironment: environment,
-            reporting: MockCoreInvocationReporting(),
-            dataRetrieverProvider: dataRetrieverProvider)!
+        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(fromEnvironment: environment,
+                                                                              containerRetrieverType: TestExpiringCredentialsRetriever.self,
+                                                                              devRetrieverType: TestExpiringCredentialsRetriever.self)!
         let credentials = credentialsProvider.credentials
         
         XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
@@ -96,14 +117,14 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
         XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)
     }
     
+    @available(swift, deprecated: 3.0, message: "Testing AwsContainerRotatingCredentialsProvider")
     func testStaticCredentials() {
         let environment = ["AWS_ACCESS_KEY_ID": TestVariables.accessKeyId,
                            "AWS_SECRET_ACCESS_KEY": TestVariables.secretAccessKey,
                            "AWS_SESSION_TOKEN": TestVariables.sessionToken]
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
-            fromEnvironment: environment,
-            reporting: MockCoreInvocationReporting(),
-            dataRetrieverProvider: dataRetrieverProvider1)!
+        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(fromEnvironment: environment,
+                                                                              containerRetrieverType: TestExpiringCredentialsRetriever.self,
+                                                                              devRetrieverType: TestExpiringCredentialsRetriever.self)!
         let credentials = credentialsProvider.credentials
         
         XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
@@ -111,21 +132,47 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
         XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)
     }
  
+    @available(swift, deprecated: 3.0, message: "Testing AwsContainerRotatingCredentialsProvider")
     func testNoCredentials() {
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
-            fromEnvironment: [:],
-            reporting: MockCoreInvocationReporting(),
-            dataRetrieverProvider: dataRetrieverProvider1)
+        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(fromEnvironment: [:],
+                                                                              containerRetrieverType: TestExpiringCredentialsRetriever.self,
+                                                                              devRetrieverType: TestExpiringCredentialsRetriever.self)
         
         XCTAssertNil(credentialsProvider)
     }
-
-    static var allTests = [
-        ("testGetCredentials", testGetCredentials),
-        ("testGetInvalidCredentials", testGetInvalidCredentials),
-        ("testGetAwsContainerCredentials", testGetAwsContainerCredentials),
-        ("testStaticCredentials", testStaticCredentials),
-        ("testNoCredentials", testNoCredentials),
-    ]
+    
+    func testGetAwsContainerCredentialsV2() async {
+        let environment = ["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "endpoint"]
+        let credentialsProvider = await AwsContainerRotatingCredentialsProviderV2.get(fromEnvironment: environment,
+                                                                                      containerRetrieverType: TestExpiringCredentialsRetriever.self,
+                                                                                      devRetrieverType: TestExpiringCredentialsRetriever.self)!
+        let credentials = credentialsProvider.credentials
+        
+        XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
+        XCTAssertEqual(TestVariables.secretAccessKey, credentials.secretAccessKey)
+        XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)
+    }
+    
+    func testStaticCredentialsV2() async {
+        let environment = ["AWS_ACCESS_KEY_ID": TestVariables.accessKeyId,
+                           "AWS_SECRET_ACCESS_KEY": TestVariables.secretAccessKey,
+                           "AWS_SESSION_TOKEN": TestVariables.sessionToken]
+        let credentialsProvider = await AwsContainerRotatingCredentialsProviderV2.get(fromEnvironment: environment,
+                                                                                      containerRetrieverType: TestExpiringCredentialsRetriever.self,
+                                                                                      devRetrieverType: TestExpiringCredentialsRetriever.self)!
+        let credentials = credentialsProvider.credentials
+        
+        XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
+        XCTAssertEqual(TestVariables.secretAccessKey, credentials.secretAccessKey)
+        XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)
+    }
+ 
+    func testNoCredentialsV2() async {
+        let credentialsProvider = await AwsContainerRotatingCredentialsProviderV2.get(fromEnvironment: [:],
+                                                                                      containerRetrieverType: TestExpiringCredentialsRetriever.self,
+                                                                                      devRetrieverType: TestExpiringCredentialsRetriever.self)
+        
+        XCTAssertNil(credentialsProvider)
+    }
 }
 

@@ -26,26 +26,49 @@ import Logging
 public extension SmokeAWSCore.CredentialsProvider {
     
     /**
-        Function to get assumed role credentials that will not track expiration and rotate.
+     Function to get assumed role credentials that will not track expiration and rotate.
+
+     - Parameters:
+       - roleArn: the ARN of the role that is to be assumed.
+       - roleSessionName: the session name to use when assuming the role.
+       - logger: the logger instance to use when reporting on obtaining these credentials.
+       - retryConfiguration: the client retry configuration to use to get the credentials.
+                             If not present, the default configuration will be used.
+    */
+    @available(*, deprecated, renamed: "getAssumedStaticCredentialsV2")
+    func getAssumedStaticCredentials(
+           roleArn: String,
+           roleSessionName: String,
+           logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+           retryConfiguration: HTTPClientRetryConfiguration = .default) -> StaticCredentials? {
+       return getAssumedStaticCredentials(roleArn: roleArn,
+                                          roleSessionName: roleSessionName,
+                                          logger: logger,
+                                          traceContext: AWSClientInvocationTraceContext(),
+                                          retryConfiguration: retryConfiguration)
+    }
     
-        - Parameters:
-           - roleArn: the ARN of the role that is to be assumed.
-           - roleSessionName: the session name to use when assuming the role.
-           - logger: the logger instance to use when reporting on obtaining these credentials.
-           - retryConfiguration: the client retry configuration to use to get the credentials.
-                                 If not present, the default configuration will be used.
-        */
-       func getAssumedStaticCredentials(
-               roleArn: String,
-               roleSessionName: String,
-               logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
-               retryConfiguration: HTTPClientRetryConfiguration = .default) -> StaticCredentials? {
-           return getAssumedStaticCredentials(roleArn: roleArn,
-                                              roleSessionName: roleSessionName,
-                                              logger: logger,
-                                              traceContext: AWSClientInvocationTraceContext(),
-                                              retryConfiguration: retryConfiguration)
-       }
+    /**
+     Function to get assumed role credentials that will not track expiration and rotate.
+
+     - Parameters:
+       - roleArn: the ARN of the role that is to be assumed.
+       - roleSessionName: the session name to use when assuming the role.
+       - logger: the logger instance to use when reporting on obtaining these credentials.
+       - retryConfiguration: the client retry configuration to use to get the credentials.
+                             If not present, the default configuration will be used.
+    */
+   func getAssumedStaticCredentialsV2(
+           roleArn: String,
+           roleSessionName: String,
+           logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+           retryConfiguration: HTTPClientRetryConfiguration = .default) async -> StaticCredentials? {
+       return await getAssumedStaticCredentialsV2(roleArn: roleArn,
+                                                  roleSessionName: roleSessionName,
+                                                  logger: logger,
+                                                  traceContext: AWSClientInvocationTraceContext(),
+                                                  retryConfiguration: retryConfiguration)
+   }
     
     /**
      Function to get assumed role credentials that will not track expiration and rotate.
@@ -58,6 +81,7 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
+    @available(*, deprecated, renamed: "getAssumedStaticCredentialsV2")
     func getAssumedStaticCredentials<TraceContextType: InvocationTraceContext>(
             roleArn: String,
             roleSessionName: String,
@@ -79,35 +103,97 @@ public extension SmokeAWSCore.CredentialsProvider {
     }
     
     /**
-        Function to get assumed role credentials that will track expiration and rotate.
+     Function to get assumed role credentials that will not track expiration and rotate.
+ 
+     - Parameters:
+        - roleArn: the ARN of the role that is to be assumed.
+        - roleSessionName: the session name to use when assuming the role.
+        - logger: the logger instance to use when reporting on obtaining these credentials.
+        - traceContext: the trace context to use when reporting on obtaining these credentials.
+        - retryConfiguration: the client retry configuration to use to get the credentials.
+                              If not present, the default configuration will be used.
+     */
+    func getAssumedStaticCredentialsV2<TraceContextType: InvocationTraceContext>(
+            roleArn: String,
+            roleSessionName: String,
+            logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+            traceContext: TraceContextType,
+            retryConfiguration: HTTPClientRetryConfiguration = .default) async -> StaticCredentials? {
+        var credentialsLogger = logger
+        credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
+        let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
+                                                       internalRequestId: "credentials.assumed.\(roleSessionName)",
+                                                       traceContext: traceContext)
+        
+        return await AWSSecurityTokenClient<CredentialsInvocationReporting<TraceContextType>>.getAssumedStaticCredentialsV2(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            credentialsProvider: self,
+            reporting: reporting,
+            retryConfiguration: retryConfiguration)
+    }
     
-        - Parameters:
-           - roleArn: the ARN of the role that is to be assumed.
-           - roleSessionName: the session name to use when assuming the role.
-           - durationSeconds: The duration, in seconds, of the role session. The value can
-               range from 900 seconds (15 minutes) to 3600 seconds (1 hour). By default, the value
-               is set to 3600 seconds.
-           - logger: the logger instance to use when reporting on obtaining these credentials.
-           - retryConfiguration: the client retry configuration to use to get the credentials.
-                                 If not present, the default configuration will be used.
-           - eventLoopProvider: the provider of the event loop for obtaining these credentials.
-        */
-       func getAssumedRotatingCredentials(
-               roleArn: String,
-               roleSessionName: String,
-               durationSeconds: Int?,
-               logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
-               retryConfiguration: HTTPClientRetryConfiguration = .default,
-               eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew) -> StoppableCredentialsProvider? {
-            return getAssumedRotatingCredentials(
-                roleArn: roleArn,
-                roleSessionName: roleSessionName,
-                durationSeconds: durationSeconds,
-                logger: logger,
-                traceContext: AWSClientInvocationTraceContext(),
-                retryConfiguration: retryConfiguration,
-                eventLoopProvider: eventLoopProvider)
-       }
+    /**
+    Function to get assumed role credentials that will track expiration and rotate.
+
+    - Parameters:
+       - roleArn: the ARN of the role that is to be assumed.
+       - roleSessionName: the session name to use when assuming the role.
+       - durationSeconds: The duration, in seconds, of the role session. The value can
+           range from 900 seconds (15 minutes) to 3600 seconds (1 hour). By default, the value
+           is set to 3600 seconds.
+       - logger: the logger instance to use when reporting on obtaining these credentials.
+       - retryConfiguration: the client retry configuration to use to get the credentials.
+                             If not present, the default configuration will be used.
+       - eventLoopProvider: the provider of the event loop for obtaining these credentials.
+    */
+    @available(*, deprecated, renamed: "getAssumedRotatingCredentialsV2")
+    func getAssumedRotatingCredentials(roleArn: String,
+                                       roleSessionName: String,
+                                       durationSeconds: Int?,
+                                       logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+                                       retryConfiguration: HTTPClientRetryConfiguration = .default,
+                                       eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew) -> StoppableCredentialsProvider? {
+        return getAssumedRotatingCredentials(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            durationSeconds: durationSeconds,
+            logger: logger,
+            traceContext: AWSClientInvocationTraceContext(),
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider)
+    }
+    
+    /**
+    Function to get assumed role credentials that will track expiration and rotate.
+
+    - Parameters:
+       - roleArn: the ARN of the role that is to be assumed.
+       - roleSessionName: the session name to use when assuming the role.
+       - durationSeconds: The duration, in seconds, of the role session. The value can
+           range from 900 seconds (15 minutes) to 3600 seconds (1 hour). By default, the value
+           is set to 3600 seconds.
+       - logger: the logger instance to use when reporting on obtaining these credentials.
+       - retryConfiguration: the client retry configuration to use to get the credentials.
+                             If not present, the default configuration will be used.
+       - eventLoopProvider: the provider of the event loop for obtaining these credentials.
+    */
+   func getAssumedRotatingCredentialsV2(
+           roleArn: String,
+           roleSessionName: String,
+           durationSeconds: Int?,
+           logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+           retryConfiguration: HTTPClientRetryConfiguration = .default,
+           eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew) async -> StoppableCredentialsProvider? {
+        return await getAssumedRotatingCredentialsV2(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            durationSeconds: durationSeconds,
+            logger: logger,
+            traceContext: AWSClientInvocationTraceContext(),
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider)
+   }
     
     /**
      Function to get assumed role credentials that will track expiration and rotate.
@@ -124,6 +210,7 @@ public extension SmokeAWSCore.CredentialsProvider {
                               If not present, the default configuration will be used.
         - eventLoopProvider: the provider of the event loop for obtaining these credentials.
      */
+    @available(*, deprecated, renamed: "getAssumedRotatingCredentialsV2")
     func getAssumedRotatingCredentials<TraceContextType: InvocationTraceContext>(
             roleArn: String,
             roleSessionName: String,
@@ -139,6 +226,30 @@ public extension SmokeAWSCore.CredentialsProvider {
                                                        traceContext: traceContext)
         
         return AWSSecurityTokenClient<CredentialsInvocationReporting<TraceContextType>>.getAssumedRotatingCredentials(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            credentialsProvider: self,
+            durationSeconds: durationSeconds,
+            reporting: reporting,
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider)
+    }
+    
+    func getAssumedRotatingCredentialsV2<TraceContextType: InvocationTraceContext>(
+            roleArn: String,
+            roleSessionName: String,
+            durationSeconds: Int?,
+            logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+            traceContext: TraceContextType,
+            retryConfiguration: HTTPClientRetryConfiguration = .default,
+            eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew) async -> StoppableCredentialsProvider? {
+        var credentialsLogger = logger
+        credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
+        let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
+                                                       internalRequestId: "credentials.assumed.\(roleSessionName)",
+                                                       traceContext: traceContext)
+        
+        return await AWSSecurityTokenClient<CredentialsInvocationReporting<TraceContextType>>.getAssumedRotatingCredentialsV2(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             credentialsProvider: self,

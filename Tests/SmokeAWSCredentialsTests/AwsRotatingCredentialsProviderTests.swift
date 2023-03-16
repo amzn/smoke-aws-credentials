@@ -64,6 +64,7 @@ class CountingScheduler: AsyncAfterScheduler {
     }
 }
 
+@available(swift, deprecated: 3.0, message: "Testing AwsRotatingCredentialsProvider")
 class AwsRotatingCredentialsProviderTests: XCTestCase {
     func testAlwaysSucceedCredentialsRotation() throws {
         let scheduler = CountingScheduler()

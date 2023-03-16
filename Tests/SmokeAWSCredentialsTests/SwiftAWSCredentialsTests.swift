@@ -58,18 +58,42 @@ class SmokeAWSCredentialsTests: XCTestCase {
         return assumeRoleSync
     }
     
-    struct TestExpiringCredentialsRetriever: ExpiringCredentialsRetriever {
+    func getAssumeRoleAsync()
+    -> SecurityTokenClientProtocol.AssumeRoleAsyncType {
+        let expiration = Date(timeIntervalSinceNow: 305)
+        let expiryString = expiration.iso8601
+        
+        func assumeRoleAsync(input: SecurityTokenModel.AssumeRoleRequest,
+                             completion: @escaping (Result<SecurityTokenModel.AssumeRoleResponseForAssumeRole, SecurityTokenError>) -> ()) throws {
+            let credentials = SecurityTokenModel.Credentials(accessKeyId: TestVariables.accessKeyId,
+                                                             expiration: expiryString,
+                                                             secretAccessKey: TestVariables.secretAccessKey,
+                                                             sessionToken: TestVariables.sessionToken)
+            
+            let assumeRoleResult = SecurityTokenModel.AssumeRoleResponse(
+                assumedRoleUser: nil,
+                credentials: credentials,
+                packedPolicySize: nil)
+            
+            completion(.success(SecurityTokenModel.AssumeRoleResponseForAssumeRole(assumeRoleResult: assumeRoleResult)))
+        }
+        
+        return assumeRoleAsync
+    }
+    
+    struct TestExpiringCredentialsRetriever: ExpiringCredentialsRetrieverV2 {
         let client: MockSecurityTokenClient
         let roleArn: String
         let roleSessionName: String
         let durationSeconds: Int?
         
         init(assumeRoleSyncOverride: @escaping SecurityTokenClientProtocol.AssumeRoleSyncType,
+             assumeRoleAsyncOverride: @escaping SecurityTokenClientProtocol.AssumeRoleAsyncType,
              roleArn: String,
              roleSessionName: String,
              durationSeconds: Int?,
              retryConfiguration: HTTPClientRetryConfiguration) {
-            self.client = MockSecurityTokenClient(assumeRoleSync: assumeRoleSyncOverride)
+            self.client = MockSecurityTokenClient(assumeRoleAsync: assumeRoleAsyncOverride, assumeRoleSync: assumeRoleSyncOverride)
             self.roleArn = roleArn
             self.roleSessionName = roleSessionName
             self.durationSeconds = durationSeconds
@@ -83,17 +107,27 @@ class SmokeAWSCredentialsTests: XCTestCase {
             
         }
         
+        @available(swift, deprecated: 3.0, message: "Testing")
         func get() throws -> ExpiringCredentials {
             return try client.getAssumedExpiringCredentials(
                         roleArn: roleArn,
                         roleSessionName: roleSessionName,
                         durationSeconds: durationSeconds)
         }
+        
+        func getCredentials() async throws -> ExpiringCredentials {
+            return try await client.getAssumedExpiringCredentialsV2(
+                        roleArn: roleArn,
+                        roleSessionName: roleSessionName,
+                        durationSeconds: durationSeconds)
+        }
     }
     
+    @available(swift, deprecated: 3.0, message: "Testing credentialsRetriever.get()")
     func testRotatingGetCredentials() throws {
         let credentialsRetriever = TestExpiringCredentialsRetriever(
             assumeRoleSyncOverride: getAssumeRoleSync(),
+            assumeRoleAsyncOverride: getAssumeRoleAsync(),
             roleArn: "arn:aws:iam::XXXXXXXXXXXX:role/theRole",
             roleSessionName: "mySession",
             durationSeconds: 3600,
@@ -108,21 +142,21 @@ class SmokeAWSCredentialsTests: XCTestCase {
         credentialsRetriever.wait()
     }
     
-    func testStaticGetCredentials() throws {
-        let client = MockSecurityTokenClient(assumeRoleSync: getAssumeRoleSync())
+    func testRotatingGetCredentialsV2() async throws {
+        let credentialsRetriever = TestExpiringCredentialsRetriever(
+            assumeRoleSyncOverride: getAssumeRoleSync(),
+            assumeRoleAsyncOverride: getAssumeRoleAsync(),
+            roleArn: "arn:aws:iam::XXXXXXXXXXXX:role/theRole",
+            roleSessionName: "mySession",
+            durationSeconds: 3600,
+            retryConfiguration: .default)
         
-        let credentials = try client.getAssumedExpiringCredentials(
-                roleArn: "arn:aws:iam::XXXXXXXXXXXX:role/theRole",
-                roleSessionName: "mySession",
-                durationSeconds: nil)
+        let credentials = try! await credentialsRetriever.getCredentials()
         XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
         XCTAssertEqual(TestVariables.secretAccessKey, credentials.secretAccessKey)
         XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)
+        
+        credentialsRetriever.close()
+        credentialsRetriever.wait()
     }
-
-
-    static var allTests = [
-        ("testRotatingGetCredentials", testRotatingGetCredentials),
-        ("testStaticGetCredentials", testStaticGetCredentials)
-    ]
 }

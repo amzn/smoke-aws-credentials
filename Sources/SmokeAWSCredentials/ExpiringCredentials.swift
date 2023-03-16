@@ -84,6 +84,10 @@ public struct ExpiringCredentials: Codable, SmokeAWSCore.Credentials {
     static func getCurrentCredentials(dataRetriever: () throws -> Data) throws -> ExpiringCredentials {
         let data = try dataRetriever()
         
+        return try getCurrentCredentials(data: data)
+    }
+    
+    static func getCurrentCredentials(data: Data) throws -> ExpiringCredentials {
         let expiringCredentials = try jsonDecoder.decode(ExpiringCredentials.self, from: data)
         
         // ensure we are not getting junk credentials data

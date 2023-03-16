@@ -26,6 +26,17 @@ import Logging
 	import Darwin
 #endif
 
+internal extension NSLocking {
+    func withLock<R>(_ body: () throws -> R) rethrows -> R {
+        self.lock()
+        defer {
+            self.unlock()
+        }
+        
+        return try body()
+    }
+}
+
 internal protocol AsyncAfterScheduler {
     func asyncAfter(deadline: DispatchTime, qos: DispatchQoS,
                     flags: DispatchWorkItemFlags,
@@ -52,13 +63,12 @@ public protocol ExpiringCredentialsRetriever {
      Gracefully shuts down this retriever. This function is idempotent and
      will handle being called multiple times. Will return when shutdown is complete.
      */
-    #if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
     func shutdown() async throws
-    #endif
     
     /**
      Retrieves a new instance of `ExpiringCredentials`.
      */
+    @available(swift, deprecated: 3.0, message: "Use getCredentials on the ExpiringCredentialsRetrieverV2 protocol")
     func get() throws -> ExpiringCredentials
 }
 
@@ -68,16 +78,15 @@ public extension ExpiringCredentialsRetriever {
         try close()
     }
     
-#if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
     func shutdown() async throws {
         fatalError("`shutdown() async throws` needs to be implemented on `ExpiringCredentialsRetriever` conforming type to allow for async shutdown.")
     }
-#endif
 }
 
 /**
  Class that manages the rotating credentials.
  */
+@available(*, deprecated, renamed: "AwsRotatingCredentialsProviderV2")
 public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     public var credentials: Credentials {
         // the provider returns a copy of the current
@@ -85,7 +94,9 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         // The provider is then free to rotate credentials
         // without the risk of rotation causing inconsistent
         // credentials to be used across a request.
-        return expiringCredentials
+        return self.statusLock.withLock {
+            return expiringCredentials
+        }
     }
     
     private var expiringCredentials: ExpiringCredentials
@@ -105,7 +116,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     public var status: Status
     var currentWorker: (() -> ())?
     let completedSemaphore = DispatchSemaphore(value: 0)
-    var statusMutex: pthread_mutex_t
+    var statusLock: NSLock = NSLock()
     let expiringCredentialsRetriever: ExpiringCredentialsRetriever
     let scheduler: AsyncAfterScheduler
     
@@ -127,20 +138,6 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         self.expiringCredentialsRetriever = expiringCredentialsRetriever
         self.scheduler = scheduler
         self.status = .initialized
-        var newMutux = pthread_mutex_t()
-        
-        var attr = pthread_mutexattr_t()
-        guard pthread_mutexattr_init(&attr) == 0 else {
-            preconditionFailure()
-        }
-		
-        pthread_mutexattr_settype(&attr, Int32(PTHREAD_MUTEX_NORMAL))
-        guard pthread_mutex_init(&newMutux, &attr) == 0 else {
-            preconditionFailure()
-        }
-		pthread_mutexattr_destroy(&attr)
-        
-        self.statusMutex = newMutux
     }
     
     deinit {
@@ -172,56 +169,57 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
      Gracefully shuts down credentials rotation, letting any ongoing work complete..
      */
     public func stop() throws {
-        pthread_mutex_lock(&statusMutex)
-        defer { pthread_mutex_unlock(&statusMutex) }
-        
-        // if there is currently a worker to shutdown
-        switch status {
-        case .initialized:
-            // no worker ever started, can just go straight to stopped
-            status = .stopped
-            try expiringCredentialsRetriever.syncShutdown()
-            completedSemaphore.signal()
-        case .running:
-            status = .shuttingDown
-            try expiringCredentialsRetriever.syncShutdown()
-        default:
-            // nothing to do
-            break
+        try self.statusLock.withLock {
+            // if there is currently a worker to shutdown
+            switch status {
+            case .initialized:
+                // no worker ever started, can just go straight to stopped
+                status = .stopped
+                try expiringCredentialsRetriever.syncShutdown()
+                completedSemaphore.signal()
+            case .running:
+                status = .shuttingDown
+                try expiringCredentialsRetriever.syncShutdown()
+            default:
+                // nothing to do
+                break
+            }
         }
     }
     
-#if (os(Linux) && compiler(>=5.5)) || (!os(Linux) && compiler(>=5.5.2)) && canImport(_Concurrency)
     public func shutdown() async throws {
-        pthread_mutex_lock(&statusMutex)
-        defer { pthread_mutex_unlock(&statusMutex) }
-        
-        // if there is currently a worker to shutdown
-        switch status {
-        case .initialized:
-            // no worker ever started, can just go straight to stopped
-            status = .stopped
-            try await expiringCredentialsRetriever.shutdown()
-            completedSemaphore.signal()
-        case .running:
-            status = .shuttingDown
-            try await expiringCredentialsRetriever.shutdown()
-        default:
-            // nothing to do
-            break
-        }
-    }
-#endif
-    
-    private func verifyWorkerNotStopped() -> Bool {
-        pthread_mutex_lock(&statusMutex)
-        defer { pthread_mutex_unlock(&statusMutex) }
-        
-        guard case .stopped = status else {
+        let isShutdown = self.statusLock.withLock {
+            // if there is currently a worker to shutdown
+            switch status {
+            case .initialized:
+                // no worker ever started, can just go straight to stopped
+                status = .stopped
+                completedSemaphore.signal()
+                return true
+            case .running:
+                status = .shuttingDown
+                return true
+            default:
+                // nothing to do
+                break
+            }
+            
             return false
         }
         
-        return true
+        if isShutdown {
+            try await expiringCredentialsRetriever.shutdown()
+        }
+    }
+    
+    private func verifyWorkerNotStopped() -> Bool {
+        return self.statusLock.withLock {
+            guard case .stopped = status else {
+                return false
+            }
+            
+            return true
+        }
     }
     
     /**
@@ -237,16 +235,15 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     }
     
     private func verifyWorkerNotCancelled() -> Bool {
-        pthread_mutex_lock(&statusMutex)
-        defer { pthread_mutex_unlock(&statusMutex) }
-        
-        guard case .running = status else {
-            status = .stopped
-            completedSemaphore.signal()
-            return false
+        return self.statusLock.withLock {
+            guard case .running = status else {
+                status = .stopped
+                completedSemaphore.signal()
+                return false
+            }
+            
+            return true
         }
-        
-        return true
     }
     
     internal func scheduleUpdateCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
@@ -281,7 +278,9 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
             do {
                 let expiringCredentials = try self.expiringCredentialsRetriever.get()
                 
-                self.expiringCredentials = expiringCredentials
+                self.statusLock.withLock {
+                    self.expiringCredentials = expiringCredentials
+                }
                 
                 expiration = expiringCredentials.expiration
             } catch {
@@ -325,10 +324,9 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         scheduler.asyncAfter(deadline: deadline, qos: .unspecified,
                              flags: [], execute: newWorker)
         
-        pthread_mutex_lock(&statusMutex)
-        defer { pthread_mutex_unlock(&statusMutex) }
-        
-        self.status = .running
-        self.currentWorker = newWorker
+        self.statusLock.withLock {
+            self.status = .running
+            self.currentWorker = newWorker
+        }
     }
 }
