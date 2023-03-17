@@ -148,7 +148,7 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
     }
     
     public func shutdown() async throws {
-        let isShutdown = self.statusLock.withLock {
+        let isShutdown = self.statusLock.withLock { () -> Bool in
             // if there is currently a worker to shutdown
             switch status {
             case .initialized:

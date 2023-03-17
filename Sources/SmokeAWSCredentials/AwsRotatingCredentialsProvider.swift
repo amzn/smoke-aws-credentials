@@ -20,12 +20,6 @@ import SmokeHTTPClient
 import SmokeAWSCore
 import Logging
 
-#if os(Linux)
-	import Glibc
-#else
-	import Darwin
-#endif
-
 internal extension NSLocking {
     func withLock<R>(_ body: () throws -> R) rethrows -> R {
         self.lock()
@@ -188,7 +182,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
     }
     
     public func shutdown() async throws {
-        let isShutdown = self.statusLock.withLock {
+        let isShutdown = self.statusLock.withLock { () -> Bool in
             // if there is currently a worker to shutdown
             switch status {
             case .initialized:
