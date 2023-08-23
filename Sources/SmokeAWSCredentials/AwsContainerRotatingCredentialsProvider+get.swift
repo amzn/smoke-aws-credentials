@@ -180,7 +180,7 @@ public extension AwsContainerRotatingCredentialsProvider {
 
         guard let secretAccessKey = awsSecretAccessKey, let accessKeyId = awsAccessKeyId else {
             let logMessage = "'AWS_ACCESS_KEY_ID' and 'AWS_SESSION_TOKEN' environment variables not"
-                + "specified. Static credentials not available."
+                + " specified. Static credentials not available."
             logger.trace("\(logMessage)")
 
             return nil
@@ -432,6 +432,8 @@ public extension AwsContainerRotatingCredentialsProvider {
 
                 return nil
             }
+            
+            rotatingCredentialsProvider.start()
 
             return rotatingCredentialsProvider
         }
@@ -448,6 +450,8 @@ public extension AwsContainerRotatingCredentialsProvider {
 
                 return nil
             }
+            
+            rotatingCredentialsProvider.start()
 
             return rotatingCredentialsProvider
         }
