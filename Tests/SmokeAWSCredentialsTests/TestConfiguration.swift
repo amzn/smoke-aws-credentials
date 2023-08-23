@@ -16,22 +16,22 @@
 //
 
 import Foundation
-@testable import SmokeAWSCredentials
 import SecurityTokenClient
 import SecurityTokenModel
+@testable import SmokeAWSCredentials
 
 let jsonEncoder: JSONEncoder = {
     let jsonEncoder = JSONEncoder()
-    
+
     if #available(OSX 10.12, *) {
         jsonEncoder.dateEncodingStrategy = .iso8601
     }
     jsonEncoder.outputFormatting = .prettyPrinted
-    
+
     return jsonEncoder
 }()
 
-struct TestVariables {
+enum TestVariables {
     static let arn = "ARN"
     static let assumedRoleId = "assumedRoleId"
     static let accessKeyId = "accessKeyId"
