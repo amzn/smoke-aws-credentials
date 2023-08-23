@@ -61,8 +61,18 @@ internal struct AWSSTSExpiringCredentialsRetriever<InvocationReportingType: HTTP
         }
     #endif
 
+    @available(swift, deprecated: 3.0, message: "Use async version")
     func get() throws -> ExpiringCredentials {
         return try self.client.getAssumedExpiringCredentials(
+            roleArn: self.roleArn,
+            roleSessionName: self.roleSessionName,
+            durationSeconds: self.durationSeconds)
+    }
+}
+
+extension AWSSTSExpiringCredentialsRetriever: ExpiringCredentialsAsyncRetriever {
+    func getCredentials() async throws -> ExpiringCredentials {
+        return try await self.client.getAssumedExpiringCredentials(
             roleArn: self.roleArn,
             roleSessionName: self.roleSessionName,
             durationSeconds: self.durationSeconds)
@@ -81,6 +91,7 @@ extension SecurityTokenClientProtocol {
             range from 900 seconds (15 minutes) to 3600 seconds (1 hour). By default, the value
             is set to 3600 seconds.
      */
+    @available(swift, deprecated: 3.0, message: "Use async version")
     func getAssumedExpiringCredentials(roleArn: String,
                                        roleSessionName: String,
                                        durationSeconds: Int?) throws -> ExpiringCredentials {
@@ -109,6 +120,7 @@ extension SecurityTokenClientProtocol {
     /**
      Function that retrieves StaticCredentials from the provided token service.
      */
+    @available(swift, deprecated: 3.0, message: "Use async version")
     static func getAssumedStaticCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(roleArn: String,
                                                                                                         roleSessionName: String,
                                                                                                         credentialsProvider: CredentialsProvider,
@@ -142,6 +154,7 @@ extension SecurityTokenClientProtocol {
     /**
      Function that retrieves AssumedRotatingCredentials from the provided token service.
      */
+    @available(swift, deprecated: 3.0, message: "Use async version")
     static func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(roleArn: String,
                                                                                                           roleSessionName: String,
                                                                                                           credentialsProvider: CredentialsProvider,
@@ -159,18 +172,128 @@ extension SecurityTokenClientProtocol {
             eventLoopProvider: eventLoopProvider,
             reporting: reporting)
 
-        let delegatedRotatingCredentials: AwsRotatingCredentialsProvider
+        let delegatedRotatingCredentials: AwsRotatingCredentialsProviderV2
         do {
-            delegatedRotatingCredentials = try AwsRotatingCredentialsProvider(
-                expiringCredentialsRetriever: credentialsRetriever)
+            delegatedRotatingCredentials = try AwsRotatingCredentialsProviderV2(
+                expiringCredentialsRetriever: credentialsRetriever,
+                roleSessionName: roleSessionName,
+                logger: reporting.logger)
         } catch {
             reporting.logger.warning("Unable to assumed delegated rotating credentials: \(error).")
 
             return nil
         }
 
-        delegatedRotatingCredentials.start(roleSessionName: roleSessionName,
-                                           reporting: reporting)
+        delegatedRotatingCredentials.start()
+
+        return delegatedRotatingCredentials
+    }
+}
+
+extension SecurityTokenClientProtocolV2 {
+    /**
+     Gets assumed role credentials from the SecurityTokenService. Returns nil
+     if no assumed credentials could be obtained.
+
+     - Parameters:
+        - roleArn: the ARN of the role that is to be assumed.ARN
+        - roleSessionName: the session name to use when assuming the role.
+        - durationSeconds: The duration, in seconds, of the role session. The value can
+            range from 900 seconds (15 minutes) to 3600 seconds (1 hour). By default, the value
+            is set to 3600 seconds.
+     */
+    func getAssumedExpiringCredentials(roleArn: String,
+                                       roleSessionName: String,
+                                       durationSeconds: Int?) async throws -> ExpiringCredentials {
+        let input = SecurityTokenModel.AssumeRoleRequest(durationSeconds: durationSeconds,
+                                                         roleArn: roleArn,
+                                                         roleSessionName: roleSessionName)
+
+        let output: SecurityTokenModel.AssumeRoleResponseForAssumeRole
+        do {
+            // call to assume the role
+            output = try await assumeRole(input: input)
+        } catch {
+            throw AssumingRoleError.unableToAssumeRole(arn: roleArn, error: error)
+        }
+
+        guard let stsCredentials = output.assumeRoleResult.credentials else {
+            throw AssumingRoleError.noCredentialsReturned(arn: roleArn)
+        }
+
+        return ExpiringCredentials(accessKeyId: stsCredentials.accessKeyId,
+                                   expiration: stsCredentials.expiration.dateFromISO8601String ?? nil,
+                                   secretAccessKey: stsCredentials.secretAccessKey,
+                                   sessionToken: stsCredentials.sessionToken)
+    }
+
+    /**
+     Function that retrieves StaticCredentials from the provided token service.
+     */
+    static func getAssumedStaticCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(roleArn: String,
+                                                                                                        roleSessionName: String,
+                                                                                                        credentialsProvider: CredentialsProvider,
+                                                                                                        reporting: InvocationReportingType,
+                                                                                                        retryConfiguration: HTTPClientRetryConfiguration) async
+    -> StaticCredentials? {
+        let securityTokenClient = AWSSecurityTokenClient(
+            credentialsProvider: credentialsProvider,
+            reporting: reporting,
+            retryConfiguration: retryConfiguration)
+        defer {
+            try? securityTokenClient.syncShutdown()
+        }
+
+        let delegatedCredentials: ExpiringCredentials
+        do {
+            delegatedCredentials = try await securityTokenClient.getAssumedExpiringCredentials(
+                roleArn: roleArn,
+                roleSessionName: roleSessionName,
+                durationSeconds: nil)
+        } catch {
+            reporting.logger.warning("Unable to assumed delegated rotating credentials: \(error).")
+
+            return nil
+        }
+
+        return StaticCredentials(accessKeyId: delegatedCredentials.accessKeyId,
+                                 secretAccessKey: delegatedCredentials.secretAccessKey,
+                                 sessionToken: delegatedCredentials.sessionToken)
+    }
+
+    /**
+     Function that retrieves AssumedRotatingCredentials from the provided token service.
+     */
+    static func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(roleArn: String,
+                                                                                                          roleSessionName: String,
+                                                                                                          credentialsProvider: CredentialsProvider,
+                                                                                                          durationSeconds: Int?,
+                                                                                                          reporting: InvocationReportingType,
+                                                                                                          retryConfiguration: HTTPClientRetryConfiguration,
+                                                                                                          eventLoopProvider: HTTPClient
+                                                                                                              .EventLoopGroupProvider) async -> StoppableCredentialsProvider? {
+        let credentialsRetriever = AWSSTSExpiringCredentialsRetriever(
+            credentialsProvider: credentialsProvider,
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            durationSeconds: durationSeconds,
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider,
+            reporting: reporting)
+
+        let delegatedRotatingCredentials: AwsRotatingCredentialsProviderV2
+        do {
+            delegatedRotatingCredentials = try await AwsRotatingCredentialsProviderV2(
+                expiringCredentialsRetriever: credentialsRetriever,
+                roleSessionName: roleSessionName,
+                logger: reporting.logger)
+        } catch {
+            reporting.logger.warning("Unable to assumed delegated rotating credentials: \(error).")
+
+            return nil
+        }
+
+        delegatedRotatingCredentials.start()
 
         return delegatedRotatingCredentials
     }

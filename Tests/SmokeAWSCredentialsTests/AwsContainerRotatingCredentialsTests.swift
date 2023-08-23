@@ -15,6 +15,7 @@
 //  SmokeAWSCredentials
 //
 
+import Logging
 @testable import SmokeAWSCredentials
 import SmokeHTTPClient
 import XCTest
@@ -33,10 +34,6 @@ private let dataRetriever2: () throws -> Data = {
 
 private let dataRetriever3: () throws -> Data = {
     return data3
-}
-
-private let dataRetrieverProvider1: (String) -> () throws -> Data = { _ in
-    dataRetriever1
 }
 
 class AwsContainerRotatingCredentialsTests: XCTestCase {
@@ -73,7 +70,7 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
         }
     }
 
-    func testGetAwsContainerCredentials() {
+    func testGetAwsContainerCredentials() async {
         // don't provide an expiration to avoid setting up a rotation timer in the test
         let nonExpiringCredentials = ExpiringCredentials(accessKeyId: TestVariables.accessKeyId,
                                                          expiration: nil,
@@ -82,15 +79,9 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
 
         let data = try! jsonEncoder.encode(nonExpiringCredentials)
 
-        let dataRetrieverProvider: (String) -> () throws -> Data = { _ in
-            { data }
-        }
-
         let environment = ["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "endpoint"]
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
-            fromEnvironment: environment,
-            reporting: MockCoreInvocationReporting(),
-            dataRetrieverProvider: dataRetrieverProvider)!
+        let credentialsProvider = await AwsContainerRotatingCredentialsProvider.get(fromEnvironment: environment,
+                                                                                    dataRetrieverOverride: { data })!
         let credentials = credentialsProvider.credentials
 
         XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
@@ -98,37 +89,26 @@ class AwsContainerRotatingCredentialsTests: XCTestCase {
         XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)
     }
 
-    func testStaticCredentials() {
+    func testStaticCredentials() async {
         let environment = [
-            "AWS_ACCESS_KEY_ID": TestVariables.accessKeyId,
-            "AWS_SECRET_ACCESS_KEY": TestVariables.secretAccessKey,
-            "AWS_SESSION_TOKEN": TestVariables.sessionToken
+            "AWS_ACCESS_KEY_ID": TestVariables.accessKeyId2,
+            "AWS_SECRET_ACCESS_KEY": TestVariables.secretAccessKey2,
+            "AWS_SESSION_TOKEN": TestVariables.sessionToken2
         ]
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
-            fromEnvironment: environment,
-            reporting: MockCoreInvocationReporting(),
-            dataRetrieverProvider: dataRetrieverProvider1)!
+
+        let credentialsProvider = await AwsContainerRotatingCredentialsProvider.get(fromEnvironment: environment,
+                                                                                    dataRetrieverOverride: dataRetriever1)!
         let credentials = credentialsProvider.credentials
 
-        XCTAssertEqual(TestVariables.accessKeyId, credentials.accessKeyId)
-        XCTAssertEqual(TestVariables.secretAccessKey, credentials.secretAccessKey)
-        XCTAssertEqual(TestVariables.sessionToken, credentials.sessionToken)
+        XCTAssertEqual(TestVariables.accessKeyId2, credentials.accessKeyId)
+        XCTAssertEqual(TestVariables.secretAccessKey2, credentials.secretAccessKey)
+        XCTAssertEqual(TestVariables.sessionToken2, credentials.sessionToken)
     }
 
-    func testNoCredentials() {
-        let credentialsProvider = AwsContainerRotatingCredentialsProvider.get(
-            fromEnvironment: [:],
-            reporting: MockCoreInvocationReporting(),
-            dataRetrieverProvider: dataRetrieverProvider1)
+    func testNoCredentials() async {
+        let credentialsProvider = await AwsContainerRotatingCredentialsProvider.get(fromEnvironment: [:],
+                                                                                    dataRetrieverOverride: dataRetriever1)
 
         XCTAssertNil(credentialsProvider)
     }
-
-    static var allTests = [
-        ("testGetCredentials", testGetCredentials),
-        ("testGetInvalidCredentials", testGetInvalidCredentials),
-        ("testGetAwsContainerCredentials", testGetAwsContainerCredentials),
-        ("testStaticCredentials", testStaticCredentials),
-        ("testNoCredentials", testNoCredentials),
-    ]
 }

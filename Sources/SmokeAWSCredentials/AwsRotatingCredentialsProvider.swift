@@ -74,6 +74,13 @@ public extension ExpiringCredentialsRetriever {
     #endif
 }
 
+public protocol ExpiringCredentialsAsyncRetriever: ExpiringCredentialsRetriever {
+    /**
+     Retrieves a new instance of `ExpiringCredentials`.
+     */
+    func getCredentials() async throws -> ExpiringCredentials
+}
+
 /**
  Class that manages the rotating credentials.
  */
