@@ -22,6 +22,17 @@ import SmokeHTTPClient
 
 private let secondsToNanoSeconds: UInt64 = 1_000_000_000
 
+internal extension NSLocking {
+    func withLock<R>(_ body: () throws -> R) rethrows -> R {
+        self.lock()
+        defer {
+            self.unlock()
+        }
+
+        return try body()
+    }
+}
+
 /**
  Class that manages the rotating credentials.
  */
