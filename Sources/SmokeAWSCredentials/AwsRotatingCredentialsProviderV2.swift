@@ -213,11 +213,14 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
             }
 
             // create a deadline 5 minutes before the expiration
-            let timeInterval = (currentExpiration - self.expirationBufferSeconds).timeIntervalSinceNow
-            let timeInternalInMinutes = timeInterval / 60
+            let waitDurationInSeconds = (currentExpiration - self.expirationBufferSeconds).timeIntervalSinceNow
+            let waitDurationInMinutes = waitDurationInSeconds / 60
 
-            let minutes = Int(timeInternalInMinutes) % 60
-            let hours = Int(timeInternalInMinutes) / 60
+            let wholeNumberOfHours = Int(waitDurationInMinutes) / 60
+            // the total number of minutes minus the number of minutes
+            // that can be expressed in a whole number of hours
+            // Can also be expressed as: let overflowMinutes = waitDurationInMinutes - (wholeNumberOfHours * 60)
+            let overflowMinutes = Int(waitDurationInMinutes) % 60
 
             let logEntryPrefix: String
             if let roleSessionName = self.roleSessionName {
@@ -227,9 +230,9 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
             }
 
             self.logger.trace(
-                "\(logEntryPrefix) updated; rotation scheduled in \(hours) hours, \(minutes) minutes.")
+                "\(logEntryPrefix) updated; rotation scheduled in \(wholeNumberOfHours) hours, \(overflowMinutes) minutes.")
             do {
-                try await Task.sleep(nanoseconds: UInt64(timeInterval) * secondsToNanoSeconds)
+                try await Task.sleep(nanoseconds: UInt64(waitDurationInSeconds) * secondsToNanoSeconds)
             } catch {
                 self.logger.error(
                     "\(logEntryPrefix) rotation stopped due to error \(error).")
