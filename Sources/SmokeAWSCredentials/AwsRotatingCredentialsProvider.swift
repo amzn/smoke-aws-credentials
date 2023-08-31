@@ -74,6 +74,13 @@ public extension ExpiringCredentialsRetriever {
     #endif
 }
 
+public protocol ExpiringCredentialsAsyncRetriever: ExpiringCredentialsRetriever {
+    /**
+     Retrieves a new instance of `ExpiringCredentials`.
+     */
+    func getCredentials() async throws -> ExpiringCredentials
+}
+
 /**
  Class that manages the rotating credentials.
  */
@@ -251,13 +258,16 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
                                                                                                         roleSessionName: String?,
                                                                                                         reporting: InvocationReportingType) {
         // create a deadline 5 minutes before the expiration
-        let timeInterval = (expiration - self.expirationBufferSeconds).timeIntervalSinceNow
-        let timeInternalInMinutes = timeInterval / 60
+        let waitDurationInSeconds = (expiration - self.expirationBufferSeconds).timeIntervalSinceNow
+        let waitDurationInMinutes = waitDurationInSeconds / 60
 
-        let minutes = Int(timeInternalInMinutes) % 60
-        let hours = Int(timeInternalInMinutes) / 60
+        let wholeNumberOfHours = Int(waitDurationInMinutes) / 60
+        // the total number of minutes minus the number of minutes
+        // that can be expressed in a whole number of hours.
+        // Can also be expressed as: let overflowMinutes = waitDurationInMinutes - (wholeNumberOfHours * 60)
+        let overflowMinutes = Int(waitDurationInMinutes) % 60
 
-        let deadline = DispatchTime.now() + .seconds(Int(timeInterval))
+        let deadline = DispatchTime.now() + .seconds(Int(waitDurationInSeconds))
 
         let logEntryPrefix: String
         if let roleSessionName = roleSessionName {
@@ -318,7 +328,7 @@ public class AwsRotatingCredentialsProvider: StoppableCredentialsProvider {
         }
 
         reporting.logger.trace(
-            "\(logEntryPrefix) updated; rotation scheduled in \(hours) hours, \(minutes) minutes.")
+            "\(logEntryPrefix) updated; rotation scheduled in \(wholeNumberOfHours) hours, \(overflowMinutes) minutes.")
         self.scheduler.asyncAfter(deadline: deadline, qos: .unspecified,
                                   flags: [], execute: newWorker)
 

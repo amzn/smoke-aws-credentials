@@ -34,6 +34,7 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
+    @available(swift, deprecated: 3.0, message: "Use async version")
     func getAssumedStaticCredentials(roleArn: String,
                                      roleSessionName: String,
                                      logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
@@ -43,6 +44,17 @@ public extension SmokeAWSCore.CredentialsProvider {
                                                 logger: logger,
                                                 traceContext: AWSClientInvocationTraceContext(),
                                                 retryConfiguration: retryConfiguration)
+    }
+
+    func getAssumedStaticCredentials(roleArn: String,
+                                     roleSessionName: String,
+                                     logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+                                     retryConfiguration: HTTPClientRetryConfiguration = .default) async -> StaticCredentials? {
+        return await self.getAssumedStaticCredentials(roleArn: roleArn,
+                                                      roleSessionName: roleSessionName,
+                                                      logger: logger,
+                                                      traceContext: AWSClientInvocationTraceContext(),
+                                                      retryConfiguration: retryConfiguration)
     }
 
     /**
@@ -56,6 +68,7 @@ public extension SmokeAWSCore.CredentialsProvider {
         - retryConfiguration: the client retry configuration to use to get the credentials.
                               If not present, the default configuration will be used.
      */
+    @available(swift, deprecated: 3.0, message: "Use async version")
     func getAssumedStaticCredentials<TraceContextType: InvocationTraceContext>(roleArn: String,
                                                                                roleSessionName: String,
                                                                                logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
@@ -68,6 +81,25 @@ public extension SmokeAWSCore.CredentialsProvider {
                                                        traceContext: traceContext)
 
         return AWSSecurityTokenClient<CredentialsInvocationReporting<TraceContextType>>.getAssumedStaticCredentials(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            credentialsProvider: self,
+            reporting: reporting,
+            retryConfiguration: retryConfiguration)
+    }
+
+    func getAssumedStaticCredentials<TraceContextType: InvocationTraceContext>(roleArn: String,
+                                                                               roleSessionName: String,
+                                                                               logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+                                                                               traceContext: TraceContextType,
+                                                                               retryConfiguration: HTTPClientRetryConfiguration = .default) async -> StaticCredentials? {
+        var credentialsLogger = logger
+        credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
+        let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
+                                                       internalRequestId: "credentials.assumed.\(roleSessionName)",
+                                                       traceContext: traceContext)
+
+        return await AWSSecurityTokenClient<CredentialsInvocationReporting<TraceContextType>>.getAssumedStaticCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             credentialsProvider: self,
@@ -89,13 +121,30 @@ public extension SmokeAWSCore.CredentialsProvider {
                               If not present, the default configuration will be used.
         - eventLoopProvider: the provider of the event loop for obtaining these credentials.
      */
+    @available(swift, deprecated: 3.0, message: "Use async version")
     func getAssumedRotatingCredentials(roleArn: String,
                                        roleSessionName: String,
                                        durationSeconds: Int?,
                                        logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
                                        retryConfiguration: HTTPClientRetryConfiguration = .default,
-                                       eventLoopProvider: HTTPClient.EventLoopGroupProvider = .createNew) -> StoppableCredentialsProvider? {
+                                       eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton) -> StoppableCredentialsProvider? {
         return self.getAssumedRotatingCredentials(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            durationSeconds: durationSeconds,
+            logger: logger,
+            traceContext: AWSClientInvocationTraceContext(),
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider)
+    }
+
+    func getAssumedRotatingCredentials(roleArn: String,
+                                       roleSessionName: String,
+                                       durationSeconds: Int?,
+                                       logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+                                       retryConfiguration: HTTPClientRetryConfiguration = .default,
+                                       eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton) async -> StoppableCredentialsProvider? {
+        return await self.getAssumedRotatingCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             durationSeconds: durationSeconds,
@@ -120,6 +169,7 @@ public extension SmokeAWSCore.CredentialsProvider {
                               If not present, the default configuration will be used.
         - eventLoopProvider: the provider of the event loop for obtaining these credentials.
      */
+    @available(swift, deprecated: 3.0, message: "Use async version")
     func getAssumedRotatingCredentials<TraceContextType: InvocationTraceContext>(roleArn: String,
                                                                                  roleSessionName: String,
                                                                                  durationSeconds: Int?,
@@ -127,7 +177,7 @@ public extension SmokeAWSCore.CredentialsProvider {
                                                                                  traceContext: TraceContextType,
                                                                                  retryConfiguration: HTTPClientRetryConfiguration = .default,
                                                                                  eventLoopProvider: HTTPClient
-                                                                                     .EventLoopGroupProvider = .createNew) -> StoppableCredentialsProvider? {
+                                                                                     .EventLoopGroupProvider = .singleton) -> StoppableCredentialsProvider? {
         var credentialsLogger = logger
         credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
         let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
@@ -135,6 +185,30 @@ public extension SmokeAWSCore.CredentialsProvider {
                                                        traceContext: traceContext)
 
         return AWSSecurityTokenClient<CredentialsInvocationReporting<TraceContextType>>.getAssumedRotatingCredentials(
+            roleArn: roleArn,
+            roleSessionName: roleSessionName,
+            credentialsProvider: self,
+            durationSeconds: durationSeconds,
+            reporting: reporting,
+            retryConfiguration: retryConfiguration,
+            eventLoopProvider: eventLoopProvider)
+    }
+
+    func getAssumedRotatingCredentials<TraceContextType: InvocationTraceContext>(roleArn: String,
+                                                                                 roleSessionName: String,
+                                                                                 durationSeconds: Int?,
+                                                                                 logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
+                                                                                 traceContext: TraceContextType,
+                                                                                 retryConfiguration: HTTPClientRetryConfiguration = .default,
+                                                                                 eventLoopProvider: HTTPClient
+                                                                                     .EventLoopGroupProvider = .singleton) async -> StoppableCredentialsProvider? {
+        var credentialsLogger = logger
+        credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
+        let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
+                                                       internalRequestId: "credentials.assumed.\(roleSessionName)",
+                                                       traceContext: traceContext)
+
+        return await AWSSecurityTokenClient<CredentialsInvocationReporting<TraceContextType>>.getAssumedRotatingCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
             credentialsProvider: self,

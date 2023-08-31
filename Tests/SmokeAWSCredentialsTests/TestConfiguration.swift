@@ -35,10 +35,13 @@ enum TestVariables {
     static let arn = "ARN"
     static let assumedRoleId = "assumedRoleId"
     static let accessKeyId = "accessKeyId"
+    static let accessKeyId2 = "accessKeyId2"
     static let expiration = "4118-03-12T20:29:09Z"
     static let pastExpiration = "1918-03-12T20:29:09Z"
     static let secretAccessKey = "secretAccessKey"
+    static let secretAccessKey2 = "secretAccessKey2"
     static let sessionToken = "sessionToken"
+    static let sessionToken2 = "sessionToken2"
     static let nullString = "null"
 }
 
