@@ -1,6 +1,6 @@
-// swift-tools-version:5.2
+// swift-tools-version:5.6
 //
-// Copyright 2018-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License").
 // You may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ let package = Package(
             targets: ["SmokeAWSCredentials"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/amzn/smoke-aws.git", from: "2.42.37"),
+        .package(url: "https://github.com/amzn/smoke-aws.git", from: "2.44.174"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
