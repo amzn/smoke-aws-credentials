@@ -1,4 +1,4 @@
-// swift-tools-version:5.6
+// swift-tools-version:5.7
 //
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
@@ -26,6 +26,7 @@ let package = Package(
             targets: ["SmokeAWSCredentials"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.19.0"),
         .package(url: "https://github.com/amzn/smoke-aws.git", from: "2.44.174"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
@@ -38,6 +39,7 @@ let package = Package(
                 .product(name: "NIO", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
             ]),
         .testTarget(
             name: "SmokeAWSCredentialsTests", dependencies: [
