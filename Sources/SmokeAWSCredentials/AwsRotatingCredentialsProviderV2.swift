@@ -11,13 +11,13 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-//  AwsRotatingCredentials.swift
+//  AwsRotatingCredentialsV2.swift
 //  SmokeAWSCredentials
 //
 
 import Foundation
 import Logging
-import SmokeAWSCore
+import AWSCore
 import SmokeHTTPClient
 
 private let secondsToNanoSeconds: UInt64 = 1_000_000_000
@@ -34,9 +34,249 @@ internal extension NSLocking {
 }
 
 /**
+ An actor that manages the current credentials. CurrentCredentials will attempt to always
+ keep the credentials valid firstly by scheduling a background task and in the worst case
+ fetching updated credentials when credentials are requested.
+ */
+private actor CurrentCredentials {
+    private var state: State
+    private let expiringCredentialsRetriever: ExpiringCredentialsAsyncRetriever
+    
+    // the task to schedule a background refresh
+    private var backgroundRefreshTask: Task<Void, Never>?
+    // the task to refresh the credentials in the background
+    // this is held seperately to `state` so the existing credentials can continue to
+    // be used until the background refresh is complete
+    private var backgroundPendingCredentialsTask: Task<ExpiringCredentials, Swift.Error>?
+    private let backgroundLogger: Logger
+    private let credentialsStreamContinuation: AsyncStream<ExpiringCredentials>.Continuation
+    
+    private enum State {
+        case present(ExpiringCredentials)
+        case pending(Task<ExpiringCredentials, Swift.Error>)
+        case missing // the credentials have previously expired and new credentials have failed to be retrieved
+    }
+    
+    private let expirationBufferSeconds: Double
+    private let backgroundExpirationBufferSeconds: Double
+
+    /**
+     Initializes the actor.
+     
+     - Parameters:
+        - credentials: the initial credentials
+        - expiringCredentialsRetriever: used to retrieve refreshed credentials when required
+        - backgroundLogger: the logger to use for background credential refreshes
+        - credentialsStreamContinuation: the continuation for a stream of credential updates.
+     */
+    init(
+        credentials: ExpiringCredentials,
+        expiringCredentialsRetriever: ExpiringCredentialsAsyncRetriever,
+        backgroundLogger: Logger,
+        credentialsStreamContinuation: AsyncStream<ExpiringCredentials>.Continuation,
+        expirationBufferSeconds: Double,
+        backgroundExpirationBufferSeconds: Double
+    ) {
+        self.state = .present(credentials)
+        self.expiringCredentialsRetriever = expiringCredentialsRetriever
+        self.backgroundLogger = backgroundLogger
+        self.credentialsStreamContinuation = credentialsStreamContinuation
+        self.expirationBufferSeconds = expirationBufferSeconds
+        self.backgroundExpirationBufferSeconds = backgroundExpirationBufferSeconds
+    }
+    
+    /**
+     Starts a task to manage refreshing the current credentials just before they are about to expire.
+     */
+    func startBackgroundRefreshTaskIfRequired() {
+        switch self.state {
+        case .present(let presentValue):
+            if let currentExpiration = presentValue.expiration {
+                self.backgroundRefreshTask = scheduleRefreshBeforeExpiration(currentExpiration)
+            }
+        case .pending, .missing:
+            // nothing to do
+            break
+        }
+    }
+
+    /**
+     Gets the current credentials, ensuring that these credentials are always valid
+     */
+    func get(
+        isBackgroundRefresh: Bool = false,
+        logger: Logger = Logger(label: "com.azmn.smoke-aws-credentials.CurrentCredentials.get")
+    ) async throws -> AWSCore.Credentials {
+        switch self.state {
+        case .present(let presentValue):
+            // if not within the buffer period and about to become expired
+            if !isBackgroundRefresh, let expiration = presentValue.expiration, 
+                  expiration > Date(timeIntervalSinceNow: self.expirationBufferSeconds) {
+                // these credentials can be used
+                logger.trace("Current credentials used.")
+                
+                return presentValue
+            } else if let backgroundPendingCredentialsTask = self.backgroundPendingCredentialsTask {
+                // if there is an-progress background refresh
+                // normally we wouldn't wait on this task but the current credentials are now expired
+                // so they can't be used
+                return try await backgroundPendingCredentialsTask.value
+            }
+            
+            logger.trace("Replacing current credentials.")
+        case .pending(let task):
+            // There is a pending credentials refresh
+            logger.trace("Waiting on existing credentials refresh")
+
+            return try await task.value
+        case .missing:
+            logger.trace("Fetching new credentials.")
+        }
+
+        // get the task for this entry
+        let task = self.handleGetFromRetriever(isBackgroundRefresh: isBackgroundRefresh)
+        
+        // if this is a background refresh, continue to use
+        // the existing credentials until the refreshed credentials
+        // are available (in other words don't hold up getting credentials
+        // for a client while the background refresh is in progress)
+        if !isBackgroundRefresh {
+            // cancel any background refresh task
+            backgroundRefreshTask?.cancel()
+            backgroundRefreshTask = nil
+            
+            // update the entry
+            // any concurrent credential gets will also wait for this task
+            self.state = .pending(task)
+        } else {
+            self.backgroundPendingCredentialsTask = task
+        }
+
+        return try await task.value
+    }
+    
+    func stop() async {
+        self.backgroundRefreshTask?.cancel()
+        self.backgroundPendingCredentialsTask?.cancel()
+        
+        do {
+            try await self.expiringCredentialsRetriever.shutdown()
+        } catch {
+            self.backgroundLogger.warning("ExpiringCredentialsRetriever failed to shutdown cleanly",
+                                          metadata: ["cause": "\(error)"])
+        }
+        
+        switch self.state {
+        case .pending(let task):
+            task.cancel()
+        case .present, .missing:
+            // nothing to do
+            break
+        }
+    }
+
+    private func handleGetFromRetriever(isBackgroundRefresh: Bool) -> Task<ExpiringCredentials, Swift.Error> {
+        Task.detached {
+            let result: Result<ExpiringCredentials, Swift.Error>
+            do {
+                // wait for the value of the entry to be retrieved
+                let value = try await self.expiringCredentialsRetriever.getCredentials()
+
+                result = .success(value)
+            } catch {
+                result = .failure(error)
+            }
+
+            await self.addEntry(isBackgroundRefresh: isBackgroundRefresh, result: result)
+
+            switch result {
+                case .success(let newEntry):
+                    return newEntry
+                case .failure(let error):
+                    throw error
+            }
+        }
+    }
+
+    private func addEntry(
+        isBackgroundRefresh: Bool,
+        result: Result<ExpiringCredentials, Swift.Error>
+    ) {
+        self.backgroundPendingCredentialsTask = nil
+        
+        guard case .success(let credentials) = result else {
+            // we ignore the failure of a background refresh, now relying on a refresh initiated by a credentials get
+            // if a refresh initiated by a credentials get fails, we potentially just don't have any valid credentials
+            // set the state is `.missing` so any future credentials get can try again to refresh the credentials
+            if !isBackgroundRefresh {
+                self.state = .missing
+            }
+            return
+        }
+        
+        self.credentialsStreamContinuation.yield(credentials)
+        
+        if let currentExpiration = credentials.expiration {
+            // there are new credentials, schedule their refresh before they expire
+            self.backgroundRefreshTask = scheduleRefreshBeforeExpiration(currentExpiration)
+        }
+
+        // update the entry
+        self.state = .present(credentials)
+    }
+    
+    // creates a task that will suspend until just before the current credentials expire
+    // and then initiates a refresh of the current credentials
+    private nonisolated func scheduleRefreshBeforeExpiration(_ currentExpiration: Date) -> Task<Void, Never> {
+        return Task {
+            // create a deadline 5 minutes before the expiration
+            let waitDurationInSeconds = (currentExpiration - self.backgroundExpirationBufferSeconds).timeIntervalSinceNow
+            let waitDurationInMinutes = waitDurationInSeconds / 60
+            
+            let wholeNumberOfHours = Int(waitDurationInMinutes) / 60
+            // the total number of minutes minus the number of minutes
+            // that can be expressed in a whole number of hours
+            // Can also be expressed as: let overflowMinutes = waitDurationInMinutes - (wholeNumberOfHours * 60)
+            let overflowMinutes = Int(waitDurationInMinutes) % 60
+                     
+            if waitDurationInSeconds > 0 {
+                self.backgroundLogger.trace(
+                    "Credentials updated; rotation scheduled in \(wholeNumberOfHours) hours, \(overflowMinutes) minutes.")
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(waitDurationInSeconds) * secondsToNanoSeconds)
+                } catch is CancellationError {
+                    self.backgroundLogger.trace(
+                        "Background credentials rotation cancelled.")
+                    return
+                } catch {
+                    self.backgroundLogger.error(
+                        "Background credentials rotation failed due to error \(error).")
+                    return
+                }
+            }
+                        
+            do {
+                _ = try await self.get(isBackgroundRefresh: true, logger: self.backgroundLogger)
+            } catch is CancellationError {
+                self.backgroundLogger.trace(
+                    "Background credentials rotation cancelled.")
+                return
+            } catch {
+                self.backgroundLogger.error(
+                    "Background credentials rotation failed due to error \(error).")
+                return
+            }
+            
+            self.backgroundLogger.trace(
+                "Background credentials rotation completed.")
+        }
+    }
+}
+
+/**
  Class that manages the rotating credentials.
  */
-public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
+public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider, CredentialsProviderV2 {
     public var credentials: Credentials {
         // the provider returns a copy of the current
         // credentials which is used within a request.
@@ -49,13 +289,13 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
     }
 
     private var expiringCredentials: ExpiringCredentials
-
-    let expirationBufferSeconds = 300.0 // 5 minutes
-    let validCredentialsRetrySeconds = 60.0 // 1 minute
-    let invalidCredentialsRetrySeconds = 3600.0 // 1 hour
-
-    let roleSessionName: String?
-    let logger: Logger
+        
+    private let currentCredentials: CurrentCredentials
+    // a stream of credentials updates that is used to ensure the `credentials` property required by the original
+    // `CredentialsProvider` protocol returns the latest set of credentials. Credential instances can be placed into this
+    // stream either due to a background refresh or initiated by a call to `getCredentials() async throws` that identified
+    // expired credentials and refreshes them on demand
+    private let credentialsStream: (stream: AsyncStream<ExpiringCredentials>, continuation: AsyncStream<ExpiringCredentials>.Continuation)
 
     public enum Status {
         case initialized
@@ -67,7 +307,6 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
     public var status: Status
     let completedSemaphore = DispatchSemaphore(value: 0)
     var statusLock: NSLock = .init()
-    let expiringCredentialsRetriever: ExpiringCredentialsAsyncRetriever
 
     /**
      Initializer that accepts the initial ExpiringCredentials instance for this provider.
@@ -78,22 +317,46 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
     @available(swift, deprecated: 3.0, message: "Migrate to async constructor")
     public init(expiringCredentialsRetriever: ExpiringCredentialsAsyncRetriever,
                 roleSessionName: String?,
-                logger: Logger) throws {
+                logger: Logger,
+                expirationBufferSeconds: Double = 120.0, // 2 minutes
+                backgroundExpirationBufferSeconds: Double = 300.0) throws { // 5 minutes
         self.expiringCredentials = try expiringCredentialsRetriever.get()
-        self.expiringCredentialsRetriever = expiringCredentialsRetriever
-        self.roleSessionName = roleSessionName
-        self.logger = logger
         self.status = .initialized
+        
+        var decoratedLogger = logger
+        if let roleSessionName {
+            decoratedLogger[metadataKey: "roleSessionName"] = "\(roleSessionName)"
+        }
+        
+        self.credentialsStream = AsyncStream.makeStream(of: ExpiringCredentials.self)
+        self.currentCredentials = CurrentCredentials(credentials: self.expiringCredentials,
+                                                     expiringCredentialsRetriever: expiringCredentialsRetriever,
+                                                     backgroundLogger: decoratedLogger,
+                                                     credentialsStreamContinuation: self.credentialsStream.continuation,
+                                                     expirationBufferSeconds: expirationBufferSeconds,
+                                                     backgroundExpirationBufferSeconds: backgroundExpirationBufferSeconds)
     }
 
     public init(expiringCredentialsRetriever: ExpiringCredentialsAsyncRetriever,
                 roleSessionName: String?,
-                logger: Logger) async throws {
+                logger: Logger,
+                expirationBufferSeconds: Double = 120.0, // 2 minutes
+                backgroundExpirationBufferSeconds: Double = 300.0) async throws { // 5 minutes
         self.expiringCredentials = try await expiringCredentialsRetriever.getCredentials()
-        self.expiringCredentialsRetriever = expiringCredentialsRetriever
-        self.roleSessionName = roleSessionName
-        self.logger = logger
         self.status = .initialized
+        
+        var decoratedLogger = logger
+        if let roleSessionName {
+            decoratedLogger[metadataKey: "roleSessionName"] = "\(roleSessionName)"
+        }
+        
+        self.credentialsStream = AsyncStream.makeStream(of: ExpiringCredentials.self)
+        self.currentCredentials = CurrentCredentials(credentials: self.expiringCredentials,
+                                                     expiringCredentialsRetriever: expiringCredentialsRetriever,
+                                                     backgroundLogger: decoratedLogger,
+                                                     credentialsStreamContinuation: self.credentialsStream.continuation,
+                                                     expirationBufferSeconds: expirationBufferSeconds,
+                                                     backgroundExpirationBufferSeconds: backgroundExpirationBufferSeconds)
     }
 
     deinit {
@@ -127,17 +390,17 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
      Gracefully shuts down credentials rotation, letting any ongoing work complete..
      */
     public func stop() throws {
-        try self.statusLock.withLock {
+        self.statusLock.withLock {
             // if there is currently a worker to shutdown
             switch status {
                 case .initialized:
                     // no worker ever started, can just go straight to stopped
                     status = .stopped
-                    try expiringCredentialsRetriever.syncShutdown()
+                    self.credentialsStream.continuation.finish()
                     completedSemaphore.signal()
                 case .running:
                     status = .shuttingDown
-                    try expiringCredentialsRetriever.syncShutdown()
+                    self.credentialsStream.continuation.finish()
                 default:
                     // nothing to do
                     break
@@ -166,7 +429,7 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
         }
 
         if isShutdown {
-            try await self.expiringCredentialsRetriever.shutdown()
+            self.credentialsStream.continuation.finish()
         }
     }
 
@@ -191,106 +454,40 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider {
 
         self.completedSemaphore.wait()
     }
-
-    private func verifyWorkerNotCancelled() -> Bool {
-        return self.statusLock.withLock {
-            guard case .running = status else {
-                status = .stopped
-                completedSemaphore.signal()
-                return false
-            }
-
-            return true
-        }
+    
+    public func getCredentials() async throws -> Credentials {
+        return try await self.currentCredentials.get()
     }
 
     func run() async {
-        var expiration: Date? = self.expiringCredentials.expiration
-
-        while let currentExpiration = expiration {
-            guard self.verifyWorkerNotCancelled() else {
-                return
-            }
-
-            // create a deadline 5 minutes before the expiration
-            let waitDurationInSeconds = (currentExpiration - self.expirationBufferSeconds).timeIntervalSinceNow
-            let waitDurationInMinutes = waitDurationInSeconds / 60
-
-            let wholeNumberOfHours = Int(waitDurationInMinutes) / 60
-            // the total number of minutes minus the number of minutes
-            // that can be expressed in a whole number of hours
-            // Can also be expressed as: let overflowMinutes = waitDurationInMinutes - (wholeNumberOfHours * 60)
-            let overflowMinutes = Int(waitDurationInMinutes) % 60
-
-            let logEntryPrefix: String
-            if let roleSessionName = self.roleSessionName {
-                logEntryPrefix = "Credentials for session '\(roleSessionName)'"
-            } else {
-                logEntryPrefix = "Credentials"
-            }
-
-            self.logger.trace(
-                "\(logEntryPrefix) updated; rotation scheduled in \(wholeNumberOfHours) hours, \(overflowMinutes) minutes.")
-            do {
-                try await Task.sleep(nanoseconds: UInt64(waitDurationInSeconds) * secondsToNanoSeconds)
-            } catch {
-                self.logger.error(
-                    "\(logEntryPrefix) rotation stopped due to error \(error).")
-            }
-
-            expiration = await self.updateCredentials(roleSessionName: roleSessionName, logger: self.logger)
-        }
-    }
-
-    private func updateCredentials(roleSessionName: String?,
-                                   logger _: Logger) async
-    -> Date? {
-        let logEntryPrefix: String
-        if let roleSessionName = roleSessionName {
-            logEntryPrefix = "Credentials for session '\(roleSessionName)'"
-        } else {
-            logEntryPrefix = "Credentials"
-        }
-
-        self.logger.trace("\(logEntryPrefix) about to expire; rotating.")
-
-        let expiration: Date?
-        do {
-            let expiringCredentials = try await self.expiringCredentialsRetriever.getCredentials()
-
+        await self.currentCredentials.startBackgroundRefreshTaskIfRequired()
+        
+        for await credentials in self.credentialsStream.stream {
             self.statusLock.withLock {
-                self.expiringCredentials = expiringCredentials
+                self.expiringCredentials = credentials
             }
-
-            expiration = expiringCredentials.expiration
-        } catch {
-            let timeIntervalSinceNow =
-                self.expiringCredentials.expiration?.timeIntervalSinceNow ?? 0
-
-            let retryDuration: Double
-            let logPrefix = "\(logEntryPrefix) rotation failed."
-
-            // if the expiry of the current credentials is still in the future
-            if timeIntervalSinceNow > 0 {
-                // try again relatively soon (still within the 5 minute credentials
-                // expirary buffer) to get new credentials
-                retryDuration = self.validCredentialsRetrySeconds
-
-                self.logger.warning(
-                    "\(logPrefix) Credentials still valid. Attempting credentials refresh in 1 minute.")
-            } else {
-                // at this point, we have tried multiple times to get new credentials
-                // something is quite wrong; try again in the future but at
-                // a reduced frequency
-                retryDuration = self.invalidCredentialsRetrySeconds
-
-                self.logger.error(
-                    "\(logPrefix) Credentials no longer valid. Attempting credentials refresh in 1 hour.")
-            }
-
-            expiration = Date(timeIntervalSinceNow: retryDuration)
         }
-
-        return expiration
+        
+        // cancel any background tasks
+        await self.currentCredentials.stop()
+        
+        self.statusLock.withLock {
+            status = .stopped
+            completedSemaphore.signal()
+        }
     }
 }
+
+#if swift(<5.9.0)
+// This should be removed once we support Swift 5.9+
+extension AsyncStream {
+    fileprivate static func makeStream(
+        of elementType: Element.Type = Element.self,
+        bufferingPolicy limit: Continuation.BufferingPolicy = .unbounded
+    ) -> (stream: AsyncStream<Element>, continuation: AsyncStream<Element>.Continuation) {
+        var continuation: AsyncStream<Element>.Continuation!
+        let stream = AsyncStream<Element>(bufferingPolicy: limit) { continuation = $0 }
+        return (stream: stream, continuation: continuation!)
+    }
+}
+#endif
