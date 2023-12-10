@@ -40,12 +40,14 @@ internal struct AWSSTSExpiringCredentialsRetriever<InvocationReportingType: HTTP
          durationSeconds: Int?,
          retryConfiguration: HTTPClientRetryConfiguration,
          eventLoopProvider: HTTPClient.EventLoopGroupProvider,
-         reporting: InvocationReportingType) {
+         reporting: InvocationReportingType,
+         reportingConfiguration: SmokeAWSClientReportingConfiguration<SecurityTokenModelOperations>) {
         self.client = AWSSecurityTokenClient(
             credentialsProvider: credentialsProvider,
             reporting: reporting,
             retryConfiguration: retryConfiguration,
-            eventLoopProvider: eventLoopProvider)
+            eventLoopProvider: eventLoopProvider,
+            reportingConfiguration: reportingConfiguration)
         self.roleArn = roleArn
         self.roleSessionName = roleSessionName
         self.durationSeconds = durationSeconds
@@ -155,14 +157,16 @@ extension SecurityTokenClientProtocol {
      Function that retrieves AssumedRotatingCredentials from the provided token service.
      */
     @available(swift, deprecated: 3.0, message: "Use async version")
-    static func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(roleArn: String,
-                                                                                                          roleSessionName: String,
-                                                                                                          credentialsProvider: CredentialsProvider,
-                                                                                                          durationSeconds: Int?,
-                                                                                                          reporting: InvocationReportingType,
-                                                                                                          retryConfiguration: HTTPClientRetryConfiguration,
-                                                                                                          eventLoopProvider: HTTPClient
-                                                                                                              .EventLoopGroupProvider) -> StoppableCredentialsProvider? {
+    static func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+        roleArn: String,
+        roleSessionName: String,
+        credentialsProvider: CredentialsProvider,
+        durationSeconds: Int?,
+        reporting: InvocationReportingType,
+        retryConfiguration: HTTPClientRetryConfiguration,
+        eventLoopProvider: HTTPClient.EventLoopGroupProvider,
+        reportingConfiguration: SmokeAWSClientReportingConfiguration<SecurityTokenModelOperations> = .none)
+    -> StoppableCredentialsProvider? {
         let credentialsRetriever = AWSSTSExpiringCredentialsRetriever(
             credentialsProvider: credentialsProvider,
             roleArn: roleArn,
@@ -170,7 +174,8 @@ extension SecurityTokenClientProtocol {
             durationSeconds: durationSeconds,
             retryConfiguration: retryConfiguration,
             eventLoopProvider: eventLoopProvider,
-            reporting: reporting)
+            reporting: reporting,
+            reportingConfiguration: reportingConfiguration)
 
         let delegatedRotatingCredentials: AwsRotatingCredentialsProviderV2
         do {
@@ -264,14 +269,16 @@ extension SecurityTokenClientProtocolV2 {
     /**
      Function that retrieves AssumedRotatingCredentials from the provided token service.
      */
-    static func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(roleArn: String,
-                                                                                                          roleSessionName: String,
-                                                                                                          credentialsProvider: CredentialsProvider,
-                                                                                                          durationSeconds: Int?,
-                                                                                                          reporting: InvocationReportingType,
-                                                                                                          retryConfiguration: HTTPClientRetryConfiguration,
-                                                                                                          eventLoopProvider: HTTPClient
-                                                                                                              .EventLoopGroupProvider) async -> StoppableCredentialsProvider? {
+    static func getAssumedRotatingCredentials<InvocationReportingType: HTTPClientCoreInvocationReporting>(
+        roleArn: String,
+        roleSessionName: String,
+        credentialsProvider: CredentialsProvider,
+        durationSeconds: Int?,
+        reporting: InvocationReportingType,
+        retryConfiguration: HTTPClientRetryConfiguration,
+        eventLoopProvider: HTTPClient.EventLoopGroupProvider,
+        reportingConfiguration: SmokeAWSClientReportingConfiguration<SecurityTokenModelOperations> = .none) async
+    -> StoppableCredentialsProvider? {
         let credentialsRetriever = AWSSTSExpiringCredentialsRetriever(
             credentialsProvider: credentialsProvider,
             roleArn: roleArn,
@@ -279,7 +286,8 @@ extension SecurityTokenClientProtocolV2 {
             durationSeconds: durationSeconds,
             retryConfiguration: retryConfiguration,
             eventLoopProvider: eventLoopProvider,
-            reporting: reporting)
+            reporting: reporting,
+            reportingConfiguration: reportingConfiguration)
 
         let delegatedRotatingCredentials: AwsRotatingCredentialsProviderV2
         do {
