@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/amzn/smoke-aws-support.git",
       "state" : {
-        "revision" : "141efadb31e399736b23cfd2478af3dbdc170259",
-        "version" : "1.5.0"
+        "revision" : "54d2a727df6d440c8c2415124f45c72484e448cd",
+        "version" : "1.6.0"
       }
     },
     {

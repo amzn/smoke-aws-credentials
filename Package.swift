@@ -28,7 +28,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.19.0"),
         .package(url: "https://github.com/amzn/smoke-aws.git", from: "2.44.174"),
-        .package(url: "https://github.com/amzn/smoke-aws-support.git", from: "1.5.0"),
+        .package(url: "https://github.com/amzn/smoke-aws-support.git", from: "1.6.0"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],

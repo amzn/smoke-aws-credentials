@@ -81,7 +81,7 @@ public extension AwsContainerRotatingCredentialsProvider {
                                                               logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
                                                               traceContext _: TraceContextType,
                                                               eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton)
-    -> StoppableCredentialsProvider? {
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         return self.get(fromEnvironment: environment,
                         logger: logger,
                         eventLoopProvider: eventLoopProvider)
@@ -97,11 +97,11 @@ public extension AwsContainerRotatingCredentialsProvider {
     static func get(fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
                     logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
                     eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton)
-    -> StoppableCredentialsProvider? {
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         var credentialsLogger = logger
         credentialsLogger[metadataKey: "credentials.source"] = "environment"
 
-        var credentialsProvider: StoppableCredentialsProvider?
+        var credentialsProvider: (StoppableCredentialsProvider & CredentialsProviderV2)?
         if let credentialsRetriever = getRotatingCredentialsRetriever(fromEnvironment: environment,
                                                                       logger: credentialsLogger,
                                                                       eventLoopProvider: eventLoopProvider,
@@ -129,7 +129,7 @@ public extension AwsContainerRotatingCredentialsProvider {
     static func get(fromEnvironment environment: [String: String] = ProcessInfo.processInfo.environment,
                     logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
                     eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton) async
-    -> StoppableCredentialsProvider? {
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         return await self.get(fromEnvironment: environment,
                               logger: logger,
                               dataRetrieverOverride: nil,
@@ -141,11 +141,11 @@ public extension AwsContainerRotatingCredentialsProvider {
                              logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
                              dataRetrieverOverride: (() throws -> Data)?,
                              eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton) async
-    -> StoppableCredentialsProvider? {
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         var credentialsLogger = logger
         credentialsLogger[metadataKey: "credentials.source"] = "environment"
 
-        var credentialsProvider: StoppableCredentialsProvider?
+        var credentialsProvider: (StoppableCredentialsProvider & CredentialsProviderV2)?
         if let credentialsRetriever = getRotatingCredentialsRetriever(fromEnvironment: environment,
                                                                       logger: credentialsLogger,
                                                                       eventLoopProvider: eventLoopProvider,
@@ -172,7 +172,7 @@ public extension AwsContainerRotatingCredentialsProvider {
 
     private static func getStaticCredentialsProvider(fromEnvironment environment: [String: String],
                                                      logger: Logger)
-    -> StoppableCredentialsProvider? {
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         // get the values of the environment variables
         let awsAccessKeyId = environment["AWS_ACCESS_KEY_ID"]
         let awsSecretAccessKey = environment["AWS_SECRET_ACCESS_KEY"]

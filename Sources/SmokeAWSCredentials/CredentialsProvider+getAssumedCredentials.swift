@@ -127,7 +127,8 @@ public extension SmokeAWSCore.CredentialsProvider {
                                        durationSeconds: Int?,
                                        logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
                                        retryConfiguration: HTTPClientRetryConfiguration = .default,
-                                       eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton) -> StoppableCredentialsProvider? {
+                                       eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton) 
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         return self.getAssumedRotatingCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
@@ -143,7 +144,8 @@ public extension SmokeAWSCore.CredentialsProvider {
                                        durationSeconds: Int?,
                                        logger: Logging.Logger = Logger(label: "com.amazon.SmokeAWSCredentials"),
                                        retryConfiguration: HTTPClientRetryConfiguration = .default,
-                                       eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton) async -> StoppableCredentialsProvider? {
+                                       eventLoopProvider: HTTPClient.EventLoopGroupProvider = .singleton) async 
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         return await self.getAssumedRotatingCredentials(
             roleArn: roleArn,
             roleSessionName: roleSessionName,
@@ -177,7 +179,8 @@ public extension SmokeAWSCore.CredentialsProvider {
                                                                                  traceContext: TraceContextType,
                                                                                  retryConfiguration: HTTPClientRetryConfiguration = .default,
                                                                                  eventLoopProvider: HTTPClient
-                                                                                     .EventLoopGroupProvider = .singleton) -> StoppableCredentialsProvider? {
+                                                                                     .EventLoopGroupProvider = .singleton) 
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         var credentialsLogger = logger
         credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
         let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
@@ -201,7 +204,8 @@ public extension SmokeAWSCore.CredentialsProvider {
                                                                                  traceContext: TraceContextType,
                                                                                  retryConfiguration: HTTPClientRetryConfiguration = .default,
                                                                                  eventLoopProvider: HTTPClient
-                                                                                     .EventLoopGroupProvider = .singleton) async -> StoppableCredentialsProvider? {
+                                                                                     .EventLoopGroupProvider = .singleton) async 
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         var credentialsLogger = logger
         credentialsLogger[metadataKey: "credentials.source"] = "assumed.\(roleSessionName)"
         let reporting = CredentialsInvocationReporting(logger: credentialsLogger,
