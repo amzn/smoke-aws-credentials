@@ -166,7 +166,7 @@ extension SecurityTokenClientProtocol {
         retryConfiguration: HTTPClientRetryConfiguration,
         eventLoopProvider: HTTPClient.EventLoopGroupProvider,
         reportingConfiguration: SmokeAWSClientReportingConfiguration<SecurityTokenModelOperations> = .none)
-    -> StoppableCredentialsProvider? {
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         let credentialsRetriever = AWSSTSExpiringCredentialsRetriever(
             credentialsProvider: credentialsProvider,
             roleArn: roleArn,
@@ -278,7 +278,7 @@ extension SecurityTokenClientProtocolV2 {
         retryConfiguration: HTTPClientRetryConfiguration,
         eventLoopProvider: HTTPClient.EventLoopGroupProvider,
         reportingConfiguration: SmokeAWSClientReportingConfiguration<SecurityTokenModelOperations> = .none) async
-    -> StoppableCredentialsProvider? {
+    -> (StoppableCredentialsProvider & CredentialsProviderV2)? {
         let credentialsRetriever = AWSSTSExpiringCredentialsRetriever(
             credentialsProvider: credentialsProvider,
             roleArn: roleArn,
@@ -304,6 +304,20 @@ extension SecurityTokenClientProtocolV2 {
         delegatedRotatingCredentials.start()
 
         return delegatedRotatingCredentials
+    }
+}
+
+private let iso8601DateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .iso8601)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
+    return formatter
+}()
+
+internal extension Foundation.Date {
+    var iso8601: String {
+        iso8601DateFormatter.string(from: self)
     }
 }
 

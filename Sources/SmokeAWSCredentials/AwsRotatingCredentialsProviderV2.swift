@@ -113,24 +113,30 @@ private actor CurrentCredentials {
             if !isBackgroundRefresh, let expiration = presentValue.expiration, 
                   expiration > Date(timeIntervalSinceNow: self.expirationBufferSeconds) {
                 // these credentials can be used
-                logger.trace("Current credentials used.")
+                logger.info("Current credentials used. Current credentials do not expire until \(expiration.iso8601)")
                 
                 return presentValue
             } else if let backgroundPendingCredentialsTask = self.backgroundPendingCredentialsTask {
+                logger.info("Waiting on existing background credentials refresh")
+                
                 // if there is an-progress background refresh
                 // normally we wouldn't wait on this task but the current credentials are now expired
                 // so they can't be used
                 return try await backgroundPendingCredentialsTask.value
             }
             
-            logger.trace("Replacing current credentials.")
+            if let expiration = presentValue.expiration {
+                logger.info("Replacing current credentials. Current credentials expiring at \(expiration.iso8601)")
+            } else {
+                logger.info("Replacing current credentials.")
+            }
         case .pending(let task):
             // There is a pending credentials refresh
-            logger.trace("Waiting on existing credentials refresh")
+            logger.info("Waiting on existing credentials refresh")
 
             return try await task.value
         case .missing:
-            logger.trace("Fetching new credentials.")
+            logger.info("Fetching new credentials.")
         }
 
         // get the task for this entry
