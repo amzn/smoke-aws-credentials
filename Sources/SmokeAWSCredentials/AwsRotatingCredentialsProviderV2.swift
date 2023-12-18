@@ -328,15 +328,10 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider, Cre
         self.expiringCredentials = try expiringCredentialsRetriever.get()
         self.status = .initialized
         
-        var decoratedLogger = logger
-        if let roleSessionName {
-            decoratedLogger[metadataKey: "roleSessionName"] = "\(roleSessionName)"
-        }
-        
         self.credentialsStream = AsyncStream.makeStream(of: ExpiringCredentials.self)
         self.currentCredentials = CurrentCredentials(credentials: self.expiringCredentials,
                                                      expiringCredentialsRetriever: expiringCredentialsRetriever,
-                                                     logger: decoratedLogger,
+                                                     logger: logger,
                                                      credentialsStreamContinuation: self.credentialsStream.continuation,
                                                      expirationBufferSeconds: expirationBufferSeconds,
                                                      backgroundExpirationBufferSeconds: backgroundExpirationBufferSeconds)
@@ -350,15 +345,10 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider, Cre
         self.expiringCredentials = try await expiringCredentialsRetriever.getCredentials()
         self.status = .initialized
         
-        var decoratedLogger = logger
-        if let roleSessionName {
-            decoratedLogger[metadataKey: "roleSessionName"] = "\(roleSessionName)"
-        }
-        
         self.credentialsStream = AsyncStream.makeStream(of: ExpiringCredentials.self)
         self.currentCredentials = CurrentCredentials(credentials: self.expiringCredentials,
                                                      expiringCredentialsRetriever: expiringCredentialsRetriever,
-                                                     logger: decoratedLogger,
+                                                     logger: logger,
                                                      credentialsStreamContinuation: self.credentialsStream.continuation,
                                                      expirationBufferSeconds: expirationBufferSeconds,
                                                      backgroundExpirationBufferSeconds: backgroundExpirationBufferSeconds)
