@@ -48,7 +48,7 @@ private actor CurrentCredentials {
     // this is held seperately to `state` so the existing credentials can continue to
     // be used until the background refresh is complete
     private var backgroundPendingCredentialsTask: Task<ExpiringCredentials, Swift.Error>?
-    private let backgroundLogger: Logger
+    private let logger: Logger
     private let credentialsStreamContinuation: AsyncStream<ExpiringCredentials>.Continuation
     
     private enum State {
@@ -72,14 +72,14 @@ private actor CurrentCredentials {
     init(
         credentials: ExpiringCredentials,
         expiringCredentialsRetriever: ExpiringCredentialsAsyncRetriever,
-        backgroundLogger: Logger,
+        logger: Logger,
         credentialsStreamContinuation: AsyncStream<ExpiringCredentials>.Continuation,
         expirationBufferSeconds: Double,
         backgroundExpirationBufferSeconds: Double
     ) {
         self.state = .present(credentials)
         self.expiringCredentialsRetriever = expiringCredentialsRetriever
-        self.backgroundLogger = backgroundLogger
+        self.logger = logger
         self.credentialsStreamContinuation = credentialsStreamContinuation
         self.expirationBufferSeconds = expirationBufferSeconds
         self.backgroundExpirationBufferSeconds = backgroundExpirationBufferSeconds
@@ -104,8 +104,7 @@ private actor CurrentCredentials {
      Gets the current credentials, ensuring that these credentials are always valid
      */
     func get(
-        isBackgroundRefresh: Bool = false,
-        logger: Logger = Logger(label: "com.azmn.smoke-aws-credentials.CurrentCredentials.get")
+        isBackgroundRefresh: Bool = false
     ) async throws -> AWSCore.Credentials {
         switch self.state {
         case .present(let presentValue):
@@ -113,24 +112,30 @@ private actor CurrentCredentials {
             if !isBackgroundRefresh, let expiration = presentValue.expiration, 
                   expiration > Date(timeIntervalSinceNow: self.expirationBufferSeconds) {
                 // these credentials can be used
-                logger.trace("Current credentials used.")
+                self.logger.trace("Current credentials used. Current credentials do not expire until \(expiration.iso8601)")
                 
                 return presentValue
             } else if let backgroundPendingCredentialsTask = self.backgroundPendingCredentialsTask {
+                self.logger.trace("Waiting on existing background credentials refresh")
+                
                 // if there is an-progress background refresh
                 // normally we wouldn't wait on this task but the current credentials are now expired
                 // so they can't be used
                 return try await backgroundPendingCredentialsTask.value
             }
             
-            logger.trace("Replacing current credentials.")
+            if let expiration = presentValue.expiration {
+                self.logger.trace("Replacing current credentials. Current credentials expiring at \(expiration.iso8601)")
+            } else {
+                self.logger.trace("Replacing current credentials.")
+            }
         case .pending(let task):
             // There is a pending credentials refresh
-            logger.trace("Waiting on existing credentials refresh")
+            self.logger.trace("Waiting on existing credentials refresh")
 
             return try await task.value
         case .missing:
-            logger.trace("Fetching new credentials.")
+            self.logger.trace("Fetching new credentials.")
         }
 
         // get the task for this entry
@@ -162,8 +167,8 @@ private actor CurrentCredentials {
         do {
             try await self.expiringCredentialsRetriever.shutdown()
         } catch {
-            self.backgroundLogger.warning("ExpiringCredentialsRetriever failed to shutdown cleanly",
-                                          metadata: ["cause": "\(error)"])
+            self.logger.warning("ExpiringCredentialsRetriever failed to shutdown cleanly",
+                                metadata: ["cause": "\(error)"])
         }
         
         switch self.state {
@@ -240,34 +245,34 @@ private actor CurrentCredentials {
             let overflowMinutes = Int(waitDurationInMinutes) % 60
                      
             if waitDurationInSeconds > 0 {
-                self.backgroundLogger.trace(
+                self.logger.trace(
                     "Credentials updated; rotation scheduled in \(wholeNumberOfHours) hours, \(overflowMinutes) minutes.")
                 do {
                     try await Task.sleep(nanoseconds: UInt64(waitDurationInSeconds) * secondsToNanoSeconds)
                 } catch is CancellationError {
-                    self.backgroundLogger.trace(
+                    self.logger.trace(
                         "Background credentials rotation cancelled.")
                     return
                 } catch {
-                    self.backgroundLogger.error(
+                    self.logger.error(
                         "Background credentials rotation failed due to error \(error).")
                     return
                 }
             }
                         
             do {
-                _ = try await self.get(isBackgroundRefresh: true, logger: self.backgroundLogger)
+                _ = try await self.get(isBackgroundRefresh: true)
             } catch is CancellationError {
-                self.backgroundLogger.trace(
+                self.logger.trace(
                     "Background credentials rotation cancelled.")
                 return
             } catch {
-                self.backgroundLogger.error(
+                self.logger.error(
                     "Background credentials rotation failed due to error \(error).")
                 return
             }
             
-            self.backgroundLogger.trace(
+            self.logger.trace(
                 "Background credentials rotation completed.")
         }
     }
@@ -323,15 +328,10 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider, Cre
         self.expiringCredentials = try expiringCredentialsRetriever.get()
         self.status = .initialized
         
-        var decoratedLogger = logger
-        if let roleSessionName {
-            decoratedLogger[metadataKey: "roleSessionName"] = "\(roleSessionName)"
-        }
-        
         self.credentialsStream = AsyncStream.makeStream(of: ExpiringCredentials.self)
         self.currentCredentials = CurrentCredentials(credentials: self.expiringCredentials,
                                                      expiringCredentialsRetriever: expiringCredentialsRetriever,
-                                                     backgroundLogger: decoratedLogger,
+                                                     logger: logger,
                                                      credentialsStreamContinuation: self.credentialsStream.continuation,
                                                      expirationBufferSeconds: expirationBufferSeconds,
                                                      backgroundExpirationBufferSeconds: backgroundExpirationBufferSeconds)
@@ -345,15 +345,10 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider, Cre
         self.expiringCredentials = try await expiringCredentialsRetriever.getCredentials()
         self.status = .initialized
         
-        var decoratedLogger = logger
-        if let roleSessionName {
-            decoratedLogger[metadataKey: "roleSessionName"] = "\(roleSessionName)"
-        }
-        
         self.credentialsStream = AsyncStream.makeStream(of: ExpiringCredentials.self)
         self.currentCredentials = CurrentCredentials(credentials: self.expiringCredentials,
                                                      expiringCredentialsRetriever: expiringCredentialsRetriever,
-                                                     backgroundLogger: decoratedLogger,
+                                                     logger: logger,
                                                      credentialsStreamContinuation: self.credentialsStream.continuation,
                                                      expirationBufferSeconds: expirationBufferSeconds,
                                                      backgroundExpirationBufferSeconds: backgroundExpirationBufferSeconds)
@@ -456,6 +451,7 @@ public class AwsRotatingCredentialsProviderV2: StoppableCredentialsProvider, Cre
     }
     
     public func getCredentials() async throws -> Credentials {
+        
         return try await self.currentCredentials.get()
     }
 
