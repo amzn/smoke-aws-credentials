@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/amzn/smoke-aws.git",
       "state" : {
-        "revision" : "07e658e0fdc8a46923156c30a76fdd5d7427465e",
-        "version" : "2.46.5"
+        "revision" : "2ab12570ff4e45b41f3c1adf9204baf57d9c0147",
+        "version" : "3.0.0"
       }
     },
     {
@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/amzn/smoke-aws-support.git",
       "state" : {
-        "revision" : "54d2a727df6d440c8c2415124f45c72484e448cd",
-        "version" : "1.6.0"
+        "revision" : "b858670eac000b3a957d85672b915c03275c0d9b",
+        "version" : "2.0.0"
       }
     },
     {
@@ -32,8 +32,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/amzn/smoke-http.git",
       "state" : {
-        "revision" : "2f27d29b863c797f74318f87579bac77935df2eb",
-        "version" : "2.22.2"
+        "revision" : "a6f386fc42d4758719b01a4e45f20c68bed88d50",
+        "version" : "3.0.0"
       }
     },
     {
